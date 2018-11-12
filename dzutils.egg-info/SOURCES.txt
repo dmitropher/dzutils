@@ -1,0 +1,4 @@
+dzutils.egg-info/PKG-INFO
+dzutils.egg-info/SOURCES.txt
+dzutils.egg-info/dependency_links.txt
+dzutils.egg-info/top_level.txt
