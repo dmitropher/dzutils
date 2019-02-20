@@ -28,5 +28,6 @@ def pdb_files_in_dir(directory):
     """
     pdb_files = files_in_dir_by_ext(directory,"pdb")
     pdb_gz_files = [ f for f in files_in_dir_by_ext(directory,"gz") if f.split()[-2] == "pdb"]
-    output = pdb_files.extend(pdb_gz_files)
+    pdb_files.extend(pdb_gz_files)
+    output = pdb_files
     return output
