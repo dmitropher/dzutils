@@ -1,7 +1,7 @@
 # This is a module for working with HBNet lines in pdb files, until I find a rosetta-ey way to get that info, or implement it if it hasn't been.
-import pyrosetta
-import sutils
-pyrosetta.distributed.maybe_init()
+import pyrosetta as _pyrosetta
+import sutils as _sutils
+_pyrosetta.distributed.maybe_init()
 
 def pdb_with_hbnets(pdb, pose=False, resType=False):
     if has_hbnet_res(pdb,  resType=resType):
@@ -51,14 +51,14 @@ def sort_by_hbnet_resType(pdbList, resList,cluster=False):
     Returns a dictionary with:
     keys -- residues in the resList
     values -- list of pdbs drawn from pdbList that have that residues listed in HBNet remarks
-    
+
     optional: pass this function a dask managed slurm cluster to sort a very large number of files
     """
-    
+
     if not cluster:
         sortedRes = {}
         for pdb in pdbList:
-            pos = pyrosetta.pose_from_file(pdb)
+            pos = _pyrosetta.pose_from_file(pdb)
             for r in resList:
                 if has_hbnet_res(pdb,pos, r):
                     if r in sortedRes and pdb not in sortedRes[r]:
@@ -66,10 +66,10 @@ def sort_by_hbnet_resType(pdbList, resList,cluster=False):
                     else:
                         sortedRes[r] = [pdb]
         return sortedRes
-    
+
     else:
         return(cluster_sort_hbnet_res(pdbList, resList,cluster))
-    
+
 def parse_hbnets_from_pdb(pdb):
     """
     Returns a list of residue numbers parsed from the hbnet lines of a pdb, or returns a blank list if none are found
@@ -92,15 +92,15 @@ def parse_hbnets_from_pdb(pdb):
 def hbnet_restypes(pdb, resTypes=[]):
     """
     Takes a pdb file location and returns a list of tuples with residue number and type.
-    
+
     Tuples are formatted: [POSE_NUMBER,3_LETTER_CODE] where POSE_NUMBER is the residue number in the HBNet REMARK line and 3_LETTER_CODE is what a protein scientist would assume it to be. It returns an empty list if none are found.
 
     Keyword arguments:
     resTypes -- restricts the output to your chosen residue type. Takes a list of three letter AA codes.
-    
+
     """
 
-    p = pyrosetta.pose_from_pdb(pdb)
+    p = _pyrosetta.pose_from_pdb(pdb)
     hbnets = parse_hbnets_from_pdb(pdb)
     outputList = []
 
@@ -131,7 +131,7 @@ def has_hbnet_res(pdb,pose=False, resType=False):
     if not resType:
         return (False)
     if not pose:
-        pose = pyrosetta.pose_from_file(pdb)
+        pose = _pyrosetta.pose_from_file(pdb)
     resType = resType.upper()
     hbnets = parse_hbnets_from_pdb(pdb)
 
