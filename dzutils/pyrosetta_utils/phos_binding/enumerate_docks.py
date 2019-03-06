@@ -79,8 +79,14 @@ def superposition_transform_from_residues_by_name(
     )
 =======
     )
+<<<<<<< HEAD:dzutils/pyrosetta_utils/phos_binding/enumerate_docks.py
     ref_coords = _pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
 >>>>>>> fix git ignore and imports:phos_binding/enumerate_docks.py
+=======
+    ref_coords = (
+        _pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
+    )
+>>>>>>> added two funcs, fixed init:phos_binding/enumerate_docks.py
     mob_res = mob_pose.residue(mob_index)
     targ_res = targ_pose.residue(targ_index)
 
@@ -116,8 +122,14 @@ def align_to_tetrahedral_rotation(nub_pose, nub_resnum, rotation=0, *args):
     )
 =======
     )
+<<<<<<< HEAD:dzutils/pyrosetta_utils/phos_binding/enumerate_docks.py
     ref_coords = _pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
 >>>>>>> fix git ignore and imports:phos_binding/enumerate_docks.py
+=======
+    ref_coords = (
+        _pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
+    )
+>>>>>>> added two funcs, fixed init:phos_binding/enumerate_docks.py
     nub_res = nub_pose.residue(nub_resnum)
 
     fixed_point = rotation % 4
