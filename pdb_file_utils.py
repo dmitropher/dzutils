@@ -41,7 +41,13 @@ def pdb_files_in_dir(directory):
 
 
 def strip_residues_from_pdb(
-    pdb_file, first, last, chain="", prefix="stripped_", out_dir=""
+    pdb_file,
+    first,
+    last,
+    chain="",
+    prefix="stripped_",
+    out_dir="",
+    remark=True,
 ):
     """
     takes a pdb file and removes the given residue range
@@ -51,7 +57,7 @@ def strip_residues_from_pdb(
     Super Jenky Function Tm don't use this unless you have to
     """
     with open(pdb_file, "r") as pdb:
-        lines = pdb_file.readlines()
+        lines = pdb.readlines()
         lines = [line.strip() for line in lines]
         trimmed = [
             line
