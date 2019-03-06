@@ -1,4 +1,4 @@
-import os as _os
+import os
 
 
 def write_list_to_file(in_list, name, ext="", delim=" "):
@@ -17,7 +17,7 @@ def files_in_dir_by_ext(directory, ext):
     """
     output = [
         root + f
-        for root, dirs, fs in _os.walk(directory, followlinks=True)
+        for root, dirs, fs in os.walk(directory, followlinks=True)
         for f in fs
         if f.split(".")[-1] == ext and f.split(".")[0]
     ]
@@ -37,40 +37,5 @@ def pdb_files_in_dir(directory):
     ]
     pdb_files.extend(pdb_gz_files)
     output = pdb_files
+
     return output
-
-
-def strip_residues_from_pdb(
-    pdb_file,
-    first,
-    last,
-    chain="",
-    prefix="stripped_",
-    out_dir="",
-    remark=True,
-):
-    """
-    takes a pdb file and removes the given residue range
-
-    outdir defaults to cwd, prefix defaults to stripped, use empty string for
-    in-place
-    Super Jenky Function Tm don't use this unless you have to
-    """
-    with open(pdb_file, "r") as pdb:
-        lines = pdb.readlines()
-        lines = [line.strip() for line in lines]
-        trimmed = [
-            line
-            for line in lines
-            if not (
-                len(line) > 25
-                and (chain in line[21])
-                and (int(line[22:26].strip()) > first)
-                and (int(line[22:26].strip()) < last)
-                and ("ATOM" in line[:7])
-            )
-        ]
-    out_dir = out_dir if out_dir else _os.getcwd()
-    basename = _os.path.basename(pdb_file)
-    with open(f"{out_dir}/{prefix}{basename}", "w+") as f:
-        f.write(f"REMARK {pdb}" + "\n" + "\n".join(trimmed))
