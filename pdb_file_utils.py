@@ -51,7 +51,7 @@ def strip_residues_from_pdb(
     Super Jenky Function Tm don't use this unless you have to
     """
     with open(pdb_file, "r") as pdb:
-        lines = pdb_file.readlines()
+        lines = pdb.readlines()
         lines = [line.strip() for line in lines]
         trimmed = [
             line
