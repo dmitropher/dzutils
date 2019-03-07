@@ -9,11 +9,6 @@ setup(
     description="Dmitri Zorine's utility scripts from the Baker Lab",
     author="Dmitri Zorine",
     author_email="dzorine@gmail.com",
-    packages=[
-        "stringcheese",
-        "func_utils",
-        "pdb_files_utils",
-        "pyrosetta_utils/hbnhax",
-        "pyrosetta_utils/helix",
-    ],
+    packages=["pyrosetta_utils"],
+    py_modules=["stringcheese", "func_utils", "pdb_file_utils"],
 )
