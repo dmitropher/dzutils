@@ -9,6 +9,5 @@ setup(
     description="Dmitri Zorine's utility scripts from the Baker Lab",
     author="Dmitri Zorine",
     author_email="dzorine@gmail.com",
-    packages=["pyrosetta_utils"],
-    py_modules=["stringcheese", "func_utils", "pdb_file_utils"],
+    packages=["dzutils", "dzutils/pyrosetta_utils", "dzutils/phos_binding"],
 )
