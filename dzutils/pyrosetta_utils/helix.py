@@ -37,6 +37,9 @@ def helixResList(pose):
 # returns the pos numbered first and last residue number of the longest
 # helix of the pose in a two member list
 def longestHelix(pose):
+    """
+    returns the longest helix in a pose
+    """
     heList = helixResList(pose)
     if not heList:
         return None
