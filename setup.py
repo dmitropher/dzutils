@@ -10,11 +10,10 @@ setup(
     author="Dmitri Zorine",
     author_email="dzorine@gmail.com",
     packages=[
-        "dzutils",
-        "dzutils/stringcheese",
-        "dzutils/func_utils",
-        "dzutils/pdb_files_utils",
-        "dzutils/pyrosetta_utils/hbnhax",
-        "dzutils/pyrosetta_utils/helix",
+        "stringcheese",
+        "func_utils",
+        "pdb_files_utils",
+        "pyrosetta_utils/hbnhax",
+        "pyrosetta_utils/helix",
     ],
 )
