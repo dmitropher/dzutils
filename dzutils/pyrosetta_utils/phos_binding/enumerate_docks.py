@@ -1,14 +1,5 @@
-<<<<<<< HEAD:dzutils/pyrosetta_utils/phos_binding/enumerate_docks.py
 import pyrosetta as _pyrosetta
 import itertools as _itertools
-=======
-import _pyrosetta
-import itertools
-import dzutils
-import _pyrosetta.distributed
-import _pyrosetta.distributed.tasks.rosetta_scripts
-import _pyrosetta.distributed.io
->>>>>>> fix git ignore and imports:phos_binding/enumerate_docks.py
 
 
 # Atom's random rama function bind ###
@@ -72,21 +63,11 @@ def superposition_transform_from_residues_by_name(
     """
     init_coords = (
         _pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
-<<<<<<< HEAD:dzutils/pyrosetta_utils/phos_binding/enumerate_docks.py
     )
+
     ref_coords = (
         _pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
     )
-=======
-    )
-<<<<<<< HEAD:dzutils/pyrosetta_utils/phos_binding/enumerate_docks.py
-    ref_coords = _pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
->>>>>>> fix git ignore and imports:phos_binding/enumerate_docks.py
-=======
-    ref_coords = (
-        _pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
-    )
->>>>>>> added two funcs, fixed init:phos_binding/enumerate_docks.py
     mob_res = mob_pose.residue(mob_index)
     targ_res = targ_pose.residue(targ_index)
 
@@ -115,21 +96,12 @@ def align_to_tetrahedral_rotation(nub_pose, nub_resnum, rotation=0, *args):
 
     init_coords = (
         _pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
-<<<<<<< HEAD:dzutils/pyrosetta_utils/phos_binding/enumerate_docks.py
     )
+
     ref_coords = (
         _pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
     )
-=======
-    )
-<<<<<<< HEAD:dzutils/pyrosetta_utils/phos_binding/enumerate_docks.py
-    ref_coords = _pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
->>>>>>> fix git ignore and imports:phos_binding/enumerate_docks.py
-=======
-    ref_coords = (
-        _pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
-    )
->>>>>>> added two funcs, fixed init:phos_binding/enumerate_docks.py
+
     nub_res = nub_pose.residue(nub_resnum)
 
     fixed_point = rotation % 4
@@ -213,11 +185,7 @@ def chains_with_resname(pose, resname):
     Takes a pose and a residue name, returns a list of chains with that residue
     """
     residue_name_selector = (
-<<<<<<< HEAD:dzutils/pyrosetta_utils/phos_binding/enumerate_docks.py
-        ___pyrosetta.rosetta.core.select.residue_selector.ResidueNameSelector()
-=======
         _pyrosetta.rosetta.core.select.residue_selector.ResidueNameSelector()
->>>>>>> fix git ignore and imports:phos_binding/enumerate_docks.py
     )
     residue_name_selector.set_residue_names(resname)
     vec = residue_name_selector.apply(pose)
@@ -280,7 +248,7 @@ def apply_rotation_generator(chains, rotnum, resname, atoms):
     )
     if len(chains) > 1:
         composed_funcs = (
-            dzutils.func_tools.compose(*func) for func in rot_functions
+            dzutils.func_utils.compose(*func) for func in rot_functions
         )
         return composed_funcs
     else:
