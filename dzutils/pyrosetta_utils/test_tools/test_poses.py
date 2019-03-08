@@ -8,6 +8,7 @@ def rossmann_monomer():
     Loads from a pdb file, this is deliberately designed to be brittle to detect
     when pyrosetta behavior has changed.
     """
+    _pyrosetta.pose_from_file("./test_pdb/rossmann_2kpo.pdb")
 
 
 def helical_monomer():
@@ -17,12 +18,14 @@ def helical_monomer():
     Loads from a pdb file, this is deliberately designed to be brittle to detect
     when pyrosetta behavior has changed.
     """
+    _pyrosetta.pose_from_file("./test_pdb/helical_4uos.pdb")
 
 
-def helical_trimer():
+def beta_fragment():
     """
     returns a pose of pdb structure
-    
+
     Loads from a pdb file, this is deliberately designed to be brittle to detect
     when pyrosetta behavior has changed.
     """
+    _pyrosetta.pose_from_file("./test_pdb/beta_fragment.pdb")
