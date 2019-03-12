@@ -8,10 +8,10 @@ def stub_from_residue(
     Returns a stub. A wrapper for atom.xyz with the default of the bb atoms.
     """
     return _pyrosetta.rosetta.core.kinematics.Stub(
-        residue.atom(start_center_atom).xyz(),
-        residue.atom(start_atom1).xyz(),
-        residue.atom(start_atom2).xyz(),
-        residue.atom(start_atom3).xyz(),
+        residue.atom(center_atom).xyz(),
+        residue.atom(atom1).xyz(),
+        residue.atom(atom2).xyz(),
+        residue.atom(atom3).xyz(),
     )
 
 
@@ -34,9 +34,11 @@ def rt_from_res_atoms(
     """
 
     stub1 = stub_from_residue(
-        start_center_atom, start_atom1, start_atom2, start_atom3
+        start_res, start_center_atom, start_atom1, start_atom2, start_atom3
     )
-    stub2 = stub_from_residue(end_center_atom, end_atom1, end_atom2, end_atom3)
+    stub2 = stub_from_residue(
+        end_res, end_center_atom, end_atom1, end_atom2, end_atom3
+    )
     rt = _pyrosetta.rosetta.core.kinematics.RT(stub1, stub2)
     return rt
 
