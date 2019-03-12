@@ -55,6 +55,8 @@ def super_resi_by_bb(mob_pose, targ_pose, mob_index, targ_index):
     ref_coords = (
         _pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
     )
+    mob_res = mob_pose.residue(mob_index)
+    targ_res = targ_pose.residue(targ_index)
     for atom in ("C", "N", "CA"):
         init_coords.append(mob_res.xyz(atom))
         ref_coords.append(targ_res.xyz(atom))
