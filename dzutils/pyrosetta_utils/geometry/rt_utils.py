@@ -56,3 +56,25 @@ def peptide_bond_rt(start_res, end_res):
         end_atom1="O",
     )
     return rt
+
+
+def residue_ca_rt_dist_sq(source_res1, dest_res1, source_res2, dest_res2):
+    """
+    Returns the distance_squared of the RT of two residue pairs
+
+    Uses the CA to CA RT of each pair
+    """
+    return rt_from_res_atoms(source_res1, dest_res1).distance_squared(
+        rt_from_res_atoms(source_res2, dest_res2)
+    )
+
+
+def residue_pep_rt_dist_sq(source_res1, dest_res1, source_res2, dest_res2):
+    """
+    Returns the distance_squared of the RT of two residue pairs
+
+    Uses the C,N,O to C,N,O RT of each pair
+    """
+    return peptide_bond_rt(source_res1, dest_res1).distance_squared(
+        peptide_bond_rt(source_res2, dest_res2)
+    )
