@@ -8,7 +8,7 @@ def rotation_translation_to_homog(rotation, translation):
     """
     Takes a rotation matrix and a translation vector and returns a h xform
     """
-    return numpy.array(
+    return _numpy.array(
         [
             [rotation.xx, rotation.xy, rotation.xz, translation.x],
             [rotation.yx, rotation.yy, rotation.yz, translation.y],
@@ -37,6 +37,11 @@ def rt_to_homog(rt):
 def invert_homog(xform):
     """
     Takes a homogenous xform and returns its inverse
+
+    Note: the inverse *but not the transpose* of a homogenous xform is the
+    inverse of the underlying rotation and translation components
+
+    It's totally fair game to just allow numpy to compute the inverse
     """
     inv = _numpy.linalg.inv(xform)
     return inv
