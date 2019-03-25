@@ -1,14 +1,11 @@
 import pyrosetta as _pyrosetta
 
 
-def chain_break(pose, index):
+def add_cut(pose, index):
     """
-    Takes a pose and an index and breaks it into two chains at the index given
+    Wrapper for the AddChainBreak() mover, does not add termini or rechains
 
-    invokes the addchainbreak mover and then adds upper and lower termini and
-    rechains based on those termini
-
-    Always rechains based on termini, always turns the cut into termini
+    Useful for grafting something, or editing fold tree and conformation
     """
     # if already a terminus, check if there's an i+1 and if it is lower termini
     num_res = len(pose.residues)
@@ -20,16 +17,34 @@ def chain_break(pose, index):
     chain_break.resnum(str(index))
     chain_break.change_foldtree(True)
     chain_break.change_conformation(True)
-    chain_break.apply(pose)
+    outpose = _pyrosetta.rosetta.core.pose.Pose()
+    outpose.detached_copy(pose)
+    chain_break.apply(outpose)
 
-    _pyrosetta.rosetta.core.pose.add_lower_terminus_type_to_pose_residue(
-        pose, index
+    return outpose
+
+
+def chain_break(pose, index):
+    """
+    Takes a pose and an index and breaks it into two chains at the index given
+
+    invokes the addchainbreak mover and then adds upper and lower termini and
+    rechains based on those termini
+
+    Always rechains based on termini, always turns the cut into termini
+    """
+    num_res = len(pose.residues)
+
+    outpose = add_cut(pose, index)
+
+    _pyrosetta.rosetta.core.pose.add_upper_terminus_type_to_pose_residue(
+        outpose, index
     )
 
     # check if there's a residue after the current index
-    if index - 1 < num_res:
-        _pyrosetta.rosetta.core.pose.add_upper_terminus_type_to_pose_residue(
-            pose, index - 1
+    if index + 1 < num_res:
+        _pyrosetta.rosetta.core.pose.add_lower_terminus_type_to_pose_residue(
+            outpose, index + 1
         )
-    pose.conformation().chains_from_termini()
-    return pose
+    outpose.conformation().chains_from_termini()
+    return outpose
