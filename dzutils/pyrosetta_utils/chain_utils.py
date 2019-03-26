@@ -1,20 +1,12 @@
 import pyrosetta as _pyrosetta
 
 
-def insert_pose(target_pose, in_pose, start, end):
-    """
-    Returns a pose with the in_pose inserted from start to end
-
-    This function only adds residues by bond at the given sites, it does not
-    search, align, or superimpose.
-    """
-
-
-def add_cut(pose, index):
+def add_cut(pose, index, new_pose=False):
     """
     Wrapper for the AddChainBreak() mover, does not add termini or rechains
 
     Useful for grafting something, or editing fold tree and conformation
+    if new_pose is true, perform the cut on a copy instead of on the input pose
     """
     # if already a terminus, check if there's an i+1 and if it is lower termini
     num_res = len(pose.residues)
@@ -26,11 +18,27 @@ def add_cut(pose, index):
     chain_break.resnum(str(index))
     chain_break.change_foldtree(True)
     chain_break.change_conformation(True)
-    outpose = _pyrosetta.rosetta.core.pose.Pose()
-    outpose.detached_copy(pose)
-    chain_break.apply(outpose)
+    if new_pose:
+        outpose = _pyrosetta.rosetta.core.pose.Pose()
+        outpose.detached_copy(pose)
+        chain_break.apply(outpose)
 
-    return outpose
+        return outpose
+    else:
+        chain_break.apply(pose)
+        return pose
+
+
+def insert_pose(target_pose, in_pose, start, end, smooth_ft=False):
+    """
+    Returns a pose with the in_pose inserted from start to end
+
+    This function only adds residues by bond at the given sites, it does not
+    search, align, or superimpose.
+
+    leaves in the cutpoints and jumps at the beginning and end of the insertion
+    unless smooth_ft is set
+    """
 
 
 def chain_break(pose, index):
