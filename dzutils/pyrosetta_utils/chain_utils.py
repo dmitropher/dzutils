@@ -1,6 +1,15 @@
 import pyrosetta as _pyrosetta
 
 
+def insert_pose(target_pose, in_pose, start, end):
+    """
+    Returns a pose with the in_pose inserted from start to end
+
+    This function only adds residues by bond at the given sites, it does not
+    search, align, or superimpose.
+    """
+
+
 def add_cut(pose, index):
     """
     Wrapper for the AddChainBreak() mover, does not add termini or rechains
