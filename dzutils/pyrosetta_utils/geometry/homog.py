@@ -20,7 +20,7 @@ def rotation_translation_to_homog(rotation, translation):
 
 def stub_to_homog(stub):
     """
-    Takes a rosetta stube and returns a h xform
+    Takes a rosetta stub and returns a h xform
     """
     return rotation_translation_to_homog(stub.M, stub.v)
 
@@ -47,13 +47,21 @@ def invert_homog(xform):
     return inv
 
 
+def homog_relative_transform(xform1, xform2):
+    """
+    returns the relative transform between two rotation translation matrices
+    """
+    xform1_inv = invert_homog(xform1)
+    return xform1_inv @ xform2
+
+
 def homog_relative_transform_from_stubs(stub1, stub2):
     """
     Takes two Rosetta stubs and converts them to a homogenous relative transform between the two
     """
     hstub1, hstub2 = stub_to_homog(stub1), stub_to_homog(stub2)
-    hstub1_inv = invert_homog(hstub1)
-    return hstub1_inv @ hstub2
+
+    return homog_relative_transform(hstub1, hstub2)
 
 
 def homog_relative_transform_from_residues(res1, res2):
