@@ -58,14 +58,39 @@ def insert_pose(target_pose, in_pose, start, end, smooth=False):
     ), "End residue for grafting must be between 1 and end of the pose"
     start_chain = pose.chain(start)
     end_chain = pose.chain(end)
-    if start_chain == end_chain and end < start:
-        raise NotImplementedError(
-            "end < start and on one chain. Cyclic peptides are not supported"
+
+    # insertion into a single chain
+    if start_chain == end_chain:
+        if end < start:
+            raise NotImplementedError(
+                "end < start and on one chain. Cyclic peptides are not supported"
+            )
+
+        # split out the desired chain
+        chains = pose.split_by_chain()
+        target_chain = chains[start_chain]
+
+        # cut out the desired region
+        cut = add_cut(target_chain, end, True)
+        cut.delete_residue_range_slow(start, end)
+
+        # Splice chain back together
+        cut_halves = cut.split_by_chain()
+        ncut, ccut = cut_halves[1], cut_halves[2]
+        inserted = ncut
+        _pyrosetta.rosetta.core.pose.append_pose_to_pose(
+            inserted, in_pose, False
         )
-    # Insertion into one chains
-    """
-    code here
-    """
+        _pyrosetta.rosetta.core.pose.append_pose_to_pose(inserted, ccut, False)
+        new_chains_list = [
+            chain if i != start_chain else inserted
+            for i, chain in enumerate(chains, 1)
+        ]
+        # combine it all into one chain
+        """
+        code here
+        """
+
     # insertion connecting two chains
     """
     code here
