@@ -71,3 +71,23 @@ def homog_relative_transform_from_residues(res1, res2):
     return homog_relative_transform_from_stubs(
         _stub_from_residue(res1), _stub_from_residue(res2)
     )
+
+
+def super_from_rt(source, dest, rt):
+    """
+    returns a homog xform that superimposes source onto the rt from dest
+
+    Takes homogenous xforms
+    """
+    return dest @ rt @ invert_homog(source)
+
+
+def superimpose_stub_by_rt(stub1, stub2, rt):
+    """
+    returns the homog xform representing the super from stub1 to rt of stub2
+
+    wrapper for super_from_rt to take rosetta stubs and rts
+    """
+    return super_from_rt(
+        stub_to_homog(stub1), stub_to_homog(stub2), rt_to_homog(rt)
+    )
