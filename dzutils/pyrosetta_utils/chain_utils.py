@@ -1,6 +1,15 @@
 import pyrosetta as _pyrosetta
 
 
+def posnum_in_chain(pose, resnum):
+    """
+    returns resnum - pose.chain_begin(resnum) + 1
+
+    sometimes i wanna keep track of stuff when i split by chain ok
+    """
+    return resnum - pose.chain_begin(resnum) + 1
+
+
 def add_cut(pose, index, new_pose=False):
     """
     Wrapper for the AddChainBreak() mover, does not add termini or rechains
@@ -54,7 +63,80 @@ def link_poses(*poses, rechain=False):
     return target
 
 
-def insert_pose(target_pose, in_pose, start, end=0, smooth=False):
+def trim_pose_to_term(pose, target, terminus=None):
+    """
+    Removes residues from start to chosen terminus, returns the pose
+
+    terminus must be "chain_begin" or "chain_end"
+    """
+    assert bool(
+        terminus == "chain_begin" or terminus == "chain_end"
+    ), "terminus must be specified as 'chain_begin' or 'chain_end'"
+    assert bool(pose.chains() == 1), "input pose must be a single chain"
+
+    if terminus == "chain_begin":
+        if target > 1:
+            pose.delete_residue_range_slow(1, target)
+
+        # And if it is the terminus, remove the terminus VariantType
+        elif pose.residue(target).has_variant_type(
+            _pyrosetta.rosetta.core.chemical.VariantType.LOWER_TERMINUS_VARIANT
+        ):
+            _pyrosetta.rosetta.core.conformation.remove_lower_terminus_type_from_conformation_residue(
+                pose.conformation(), target
+            )
+
+    if terminus == "chain_end":
+        if target < len(chain.resdiues):
+            chain.delete_residue_range_slow(target, len(chain.resdiues))
+
+        # And if it is the terminus, remove the terminus VariantType
+        elif pose.residue(target).has_variant_type(
+            _pyrosetta.rosetta.core.chemical.VariantType.UPPER_TERMINUS_VARIANT
+        ):
+            _pyrosetta.rosetta.core.conformation.remove_upper_terminus_type_from_conformation_residue(
+                pose.conformation(), target
+            )
+
+    return pose
+
+
+def insert_pose_as_chain_terminus(
+    pose, in_pose, target, terminus=None, smooth=False
+):
+    """
+    Returns a pose with the in_pose appended as the terminus at resnum "target"
+
+    Specify chain_begin or chain_end for terminus to get it as N term or C term
+    respectively
+
+    Smooth not yet implemented
+    """
+    if smooth:
+        raise NotImplementedError(
+            "Sorry, fold tree smoothing not implemented yet"
+        )
+    target_pose = _pyrosetta.rosetta.core.pose.Pose()
+    target_pose.detached_copy(pose)
+    chain_num = target_pose.chain(target)
+    chain = target_pose.chain(target)
+    trimmed = trim_pose_to_term(
+        chain, posnum_in_chain(target_pose, target), terminus=terminus
+    )
+    inserted = (
+        link_poses(in_pose, trimmed)
+        if terminus == "chain_begin"
+        else link_poses(trimmed, in_pose)
+    )
+
+    new_chains = (
+        chain if i != chain_num else inserted
+        for i, chain in enumerate(chains, 1)
+    )
+    return link_poses(*new_chains, rechain=True)
+
+
+def insert_pose(target_pose, in_pose, start=0, end=0, smooth=False):
     """
     Returns a pose with the in_pose inserted from start to end
 
@@ -72,8 +154,22 @@ def insert_pose(target_pose, in_pose, start, end=0, smooth=False):
 
     This function is not responsible for deleting any poses you feed it.
     """
+    if smooth:
+        raise NotImplementedError(
+            "Sorry, fold tree smoothing not implemented yet"
+        )
     pose = target_pose.clone()
     pose_len = len(pose.residues)
+    assert bool(start or end), "must specify start, end or both"
+    if not end or not start:
+        return insert_pose_as_chain_terminus(
+            chain,
+            in_pose,
+            start if start else end,
+            terminus="chain_begin" if start else "chain_end",
+            smooth=smooth,
+        )
+
     assert bool(
         start > 0 and start <= pose_len
     ), "Start residue for grafting must be between 1 and end of the pose"
@@ -81,18 +177,19 @@ def insert_pose(target_pose, in_pose, start, end=0, smooth=False):
     assert bool(
         start > 0 and start <= pose_len
     ), "End residue for grafting must be between 1 and end of the pose"
+
+    linked_pose = _pyrosetta.rosetta.core.pose.Pose()
     start_chain = pose.chain(start)
     end_chain = pose.chain(end)
 
     # insertion into a single chain
-    inserted = _pyrosetta.rosetta.core.pose.Pose()
-    linked_pose = _pyrosetta.rosetta.core.pose.Pose()
 
     # Case for insertion into a single chain
     if start_chain == end_chain:
-        if end and end < start:
+        if end < start:
             raise NotImplementedError(
-                "end < start and on one chain. Cyclic peptides are not supported"
+                "end < start and on one chain. \
+                Cyclic peptides are not yet supported"
             )
 
         # split out the desired chain
@@ -101,41 +198,53 @@ def insert_pose(target_pose, in_pose, start, end=0, smooth=False):
 
         # if end is defined, cut out the region between start and end
         # and splice
-        if end:
-            cut = add_cut(target_chain, end, True)
-            cut.delete_residue_range_slow(start, end)
-            cut_halves = cut.split_by_chain()
-            ncut, ccut = cut_halves[1], cut_halves[2]
-            inserted = link_poses(ncut, in_pose, ccut)
+        cut = add_cut(target_chain, end, True)
+        cut.delete_residue_range_slow(start, end)
+        cut_halves = cut.split_by_chain()
+        ncut, ccut = cut_halves[1], cut_halves[2]
+        inserted = link_poses(ncut, in_pose, ccut)
         # otherwise, if start is not the terminus,
         # remove residues up to the terminus
-        else:
-            if start < len(target_chain.resdiues):
-                cut = add_cut(target_chain, start + 1, True)
-                cut.delete_residue_range_slow(
-                    start, len(target_chain.resdiues)
-                )
-
-            # And if it is the terminus, remove the terminus VariantType
-            elif target_chain.residue(start).has_variant_type(
-                _pyrosetta.rosetta.core.chemical.VariantType.UPPER_TERMINUS_VARIANT
-            ):
-                _pyrosetta.rosetta.core.pose.remove_upper_terminus_type_from_pose_residue()
-            inserted = link_poses(target_chain, in_pose)
 
         # combine it all into one chain
         new_chains = (
             chain if i != start_chain else inserted
             for i, chain in enumerate(chains, 1)
         )
-        inserted = link_poses(*new_chains, rechain=True)
+        linked_pose = link_poses(*new_chains, rechain=True)
     # insertion connecting two chains
-    """
-    code here
-    """
+    else:
+        chains = pose.split_by_chain()
+        n_chain = chains[start_chain]
+        n_chain_end = len(n_chain.residues)
+        c_chain = chains[end_chain]
+        # delete all residues to the c-term of "start" n_chain
+        # delete all residue preceding "end" on "end" c_chain
 
-    # rejoin chains,
-
+        # remove terminus variants if necessary, and remove range otherwise
+        if end == 1 and c_chain.residue(end).has_variant_type(
+            _pyrosetta.rosetta.core.chemical.VariantType.LOWER_TERMINUS_VARIANT
+        ):
+            _pyrosetta.rosetta.core.conformation.remove_lower_terminus_type_from_conformation_residue(
+                c_chain.conformation(), end
+            )
+        else:
+            c_chain.delete_residue_range_slow(1, end)
+        if start == n_chain_end and n_chain.residue(start).has_variant_type(
+            _pyrosetta.rosetta.core.chemical.VariantType.UPPER_TERMINUS_VARIANT
+        ):
+            _pyrosetta.rosetta.core.conformation.remove_upper_terminus_type_from_conformation_residue(
+                n_chain.conformation(), start
+            )
+        else:
+            c_chain.delete_residue_range_slow(start, n_chain_end)
+        inserted = link_poses(n_chain, in_pose, c_chain)
+        new_chains = (
+            chain if i != start_chain else inserted
+            for i, chain in enumerate(chains, 1)
+            if i != end_chain
+        )
+        linked_pose = link_poses(*new_chains, rechain=True)
     # maybe smooth fold tree here
 
 
