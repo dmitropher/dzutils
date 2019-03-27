@@ -87,8 +87,8 @@ def trim_pose_to_term(pose, target, terminus=None):
             )
 
     if terminus == "chain_end":
-        if target < len(chain.resdiues):
-            chain.delete_residue_range_slow(target, len(chain.resdiues))
+        if target < len(pose.resdiues):
+            pose.delete_residue_range_slow(target, len(pose.resdiues))
 
         # And if it is the terminus, remove the terminus VariantType
         elif pose.residue(target).has_variant_type(
@@ -161,28 +161,31 @@ def insert_pose(target_pose, in_pose, start=0, end=0, smooth=False):
     pose = target_pose.clone()
     pose_len = len(pose.residues)
     assert bool(start or end), "must specify start, end or both"
+
+    # This should maybe just not be supported, but this function wraps
+    # insert_pose_as_chain_terminus
     if not end or not start:
         return insert_pose_as_chain_terminus(
             chain,
             in_pose,
             start if start else end,
-            terminus="chain_begin" if start else "chain_end",
+            terminus="chain_end" if start else "chain_begin",
             smooth=smooth,
         )
 
     assert bool(
-        start > 0 and start <= pose_len
-    ), "Start residue for grafting must be between 1 and end of the pose"
+        start <= pose_len
+    ), "Start residue for grafting may not be greater \
+    than the number of residues in the pose"
 
     assert bool(
-        start > 0 and start <= pose_len
-    ), "End residue for grafting must be between 1 and end of the pose"
+        end <= pose_len
+    ), "End residue for grafting may not be greater \
+    than the number of residues in the pose"
 
     linked_pose = _pyrosetta.rosetta.core.pose.Pose()
     start_chain = pose.chain(start)
     end_chain = pose.chain(end)
-
-    # insertion into a single chain
 
     # Case for insertion into a single chain
     if start_chain == end_chain:
@@ -196,15 +199,12 @@ def insert_pose(target_pose, in_pose, start=0, end=0, smooth=False):
         chains = pose.split_by_chain()
         target_chain = chains[start_chain]
 
-        # if end is defined, cut out the region between start and end
-        # and splice
+        # cut out the region and splice in the new fragment
         cut = add_cut(target_chain, end, True)
         cut.delete_residue_range_slow(start, end)
         cut_halves = cut.split_by_chain()
         ncut, ccut = cut_halves[1], cut_halves[2]
         inserted = link_poses(ncut, in_pose, ccut)
-        # otherwise, if start is not the terminus,
-        # remove residues up to the terminus
 
         # combine it all into one chain
         new_chains = (
@@ -215,29 +215,16 @@ def insert_pose(target_pose, in_pose, start=0, end=0, smooth=False):
     # insertion connecting two chains
     else:
         chains = pose.split_by_chain()
-        n_chain = chains[start_chain]
-        n_chain_end = len(n_chain.residues)
-        c_chain = chains[end_chain]
-        # delete all residues to the c-term of "start" n_chain
-        # delete all residue preceding "end" on "end" c_chain
-
-        # remove terminus variants if necessary, and remove range otherwise
-        if end == 1 and c_chain.residue(end).has_variant_type(
-            _pyrosetta.rosetta.core.chemical.VariantType.LOWER_TERMINUS_VARIANT
-        ):
-            _pyrosetta.rosetta.core.conformation.remove_lower_terminus_type_from_conformation_residue(
-                c_chain.conformation(), end
-            )
-        else:
-            c_chain.delete_residue_range_slow(1, end)
-        if start == n_chain_end and n_chain.residue(start).has_variant_type(
-            _pyrosetta.rosetta.core.chemical.VariantType.UPPER_TERMINUS_VARIANT
-        ):
-            _pyrosetta.rosetta.core.conformation.remove_upper_terminus_type_from_conformation_residue(
-                n_chain.conformation(), start
-            )
-        else:
-            c_chain.delete_residue_range_slow(start, n_chain_end)
+        n_chain = trim_pose_to_term(
+            chains[start_chain],
+            posnum_in_chain(pose, start),
+            terminus="chain_end",
+        )
+        c_chain = trim_pose_to_term(
+            chains[end_chain],
+            posnum_in_chain(pose, end),
+            terminus="chain_begin",
+        )
         inserted = link_poses(n_chain, in_pose, c_chain)
         new_chains = (
             chain if i != start_chain else inserted
