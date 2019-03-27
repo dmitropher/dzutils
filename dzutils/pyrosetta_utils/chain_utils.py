@@ -29,16 +29,48 @@ def add_cut(pose, index, new_pose=False):
         return pose
 
 
-def insert_pose(target_pose, in_pose, start, end, smooth_ft=False):
+def insert_pose(target_pose, in_pose, start, end, smooth=False):
     """
     Returns a pose with the in_pose inserted from start to end
+
+    If start and end are on different chains, residues are removed up to the
+    last residue of "start"'s chain number, and from the beginning of "end"'s
+    chain up to "end".
+
+    leaves in the cutpoints and jumps at the beginning and end of the insertion
+    unless smooth is set. If the insertion joins two chains, smooth
+    converts them to a single peptide edge and keeps any jumps. It does not
+    yet support cyclic peptides.
 
     This function only adds residues by bond at the given sites, it does not
     search, align, or superimpose.
 
-    leaves in the cutpoints and jumps at the beginning and end of the insertion
-    unless smooth_ft is set
+    this function is not responsible for deleting any poses you feed it.
     """
+    pose = target_pose.clone()
+    pose_len = len(pose.residues)
+    assert bool(
+        start > 0 and start <= pose_len
+    ), "Start residue for grafting must be between 1 and end of the pose"
+
+    assert bool(
+        start > 0 and start <= pose_len
+    ), "End residue for grafting must be between 1 and end of the pose"
+    start_chain = pose.chain(start)
+    end_chain = pose.chain(end)
+    if start_chain == end_chain and end < start:
+        raise NotImplementedError(
+            "end < start and on one chain. Cyclic peptides are not supported"
+        )
+    # Insertion into one chains
+    """
+    code here
+    """
+    # insertion connecting two chains
+    """
+    code here
+    """
+    # maybe smooth fold tree here
 
 
 def chain_break(pose, index):
