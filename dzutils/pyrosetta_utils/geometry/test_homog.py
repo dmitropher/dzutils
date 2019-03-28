@@ -4,7 +4,7 @@ import numpy as _np
 import test_poses as _tp
 
 
-class TestCreation(unittest.TestCase):
+class TestHomogUtils(unittest.TestCase):
     """
     Test the homog xform creator functions
     """
