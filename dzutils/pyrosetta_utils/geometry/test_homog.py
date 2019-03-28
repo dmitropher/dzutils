@@ -1,5 +1,6 @@
 import homog
 import unittest
+from unittest.mock import Mock as Mock
 import numpy as _np
 import dzutils.pyrosetta_utils.test_tools.test_poses as _tp
 
@@ -74,7 +75,7 @@ class TestHomogUtils(unittest.TestCase):
             [[0, 2, 1, 2], [1, 1, 2, 2], [0, 1, 1, 4], [0, 0, 0, 1]]
         )
         inv = _np.linalg.inv(hardcode1)
-        assertEqual(
+        self.assertEqual(
             inv @ hardcode2,
             homog.homog_relative_transform(hardcode1, hardcode2),
         )
@@ -97,7 +98,7 @@ class TestHomogUtils(unittest.TestCase):
         stub2.M = rosetta_matrix2
         stub2.v = rosetta_vector2
         ident = _np.identity(4)
-        assertEqual(
+        self.assertEqual(
             ident, homog.homog_relative_transform_from_stubs(stub1, stub2)
         )
 
