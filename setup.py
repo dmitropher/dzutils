@@ -13,5 +13,7 @@ setup(
         "dzutils",
         "dzutils/pyrosetta_utils",
         "dzutils/pyrosetta_utils/phos_binding",
+        "dzutils/pyrosetta_utils/geometry",
+        "dzutils/pyrosetta_utils/test_tools",
     ],
 )
