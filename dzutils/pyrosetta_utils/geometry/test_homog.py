@@ -1,7 +1,7 @@
-import dzutils.pyrosetta_utils.geometry.homog as homog
 import unittest
 from unittest.mock import Mock as Mock
 import numpy as _np
+import dzutils.pyrosetta_utils.geometry.homog as homog
 import dzutils.pyrosetta_utils.test_tools.test_poses as _tp
 
 
