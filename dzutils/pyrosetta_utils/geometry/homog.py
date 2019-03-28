@@ -57,7 +57,7 @@ def homog_relative_transform(xform1, xform2):
 
 def homog_relative_transform_from_stubs(stub1, stub2):
     """
-    Takes two Rosetta stubs and converts them to a homogenous relative transform between the two
+    Converts Rosetta stubs to a homog relative xform between the two
     """
     hstub1, hstub2 = stub_to_homog(stub1), stub_to_homog(stub2)
 
@@ -66,8 +66,28 @@ def homog_relative_transform_from_stubs(stub1, stub2):
 
 def homog_relative_transform_from_residues(res1, res2):
     """
-    Wrapper for making CA to CA homogenouse relative transform between residues
+    Wrapper for making CA to CA homogenous relative transform between residues
     """
     return homog_relative_transform_from_stubs(
         _stub_from_residue(res1), _stub_from_residue(res2)
+    )
+
+
+def super_from_rt(source, dest, rt):
+    """
+    returns a homog xform that superimposes source onto the rt from dest
+
+    Takes homogenous xforms
+    """
+    return dest @ rt @ invert_homog(source)
+
+
+def superimpose_stub_by_rt(stub1, stub2, rt):
+    """
+    returns the homog xform representing the super from stub1 to rt of stub2
+
+    wrapper for super_from_rt to take rosetta stubs and rts
+    """
+    return super_from_rt(
+        stub_to_homog(stub1), stub_to_homog(stub2), rt_to_homog(rt)
     )

@@ -1,11 +1,21 @@
 import pyrosetta as _pyrosetta
 
 
-def add_cut(pose, index):
+def posnum_in_chain(pose, resnum):
+    """
+    returns resnum - pose.chain_begin(resnum) + 1
+
+    sometimes i wanna keep track of stuff when i split by chain ok
+    """
+    return resnum - pose.chain_begin(resnum) + 1
+
+
+def add_cut(pose, index, new_pose=False):
     """
     Wrapper for the AddChainBreak() mover, does not add termini or rechains
 
     Useful for grafting something, or editing fold tree and conformation
+    if new_pose is true, perform the cut on a copy instead of on the input pose
     """
     # if already a terminus, check if there's an i+1 and if it is lower termini
     num_res = len(pose.residues)
@@ -17,11 +27,212 @@ def add_cut(pose, index):
     chain_break.resnum(str(index))
     chain_break.change_foldtree(True)
     chain_break.change_conformation(True)
-    outpose = _pyrosetta.rosetta.core.pose.Pose()
-    outpose.detached_copy(pose)
-    chain_break.apply(outpose)
+    if new_pose:
+        outpose = _pyrosetta.rosetta.core.pose.Pose()
+        outpose.detached_copy(pose)
+        chain_break.apply(outpose)
 
-    return outpose
+        return outpose
+    else:
+        chain_break.apply(pose)
+        return pose
+
+
+def link_poses(*poses, rechain=False):
+    """
+    returns a pose of any number of poses appended end to end
+
+    Order of input poses must be correct N->C, rechain appends by jump and calls
+    chains_from_termini on the final conformation and copies but does not mess
+    with pdb_info beyond what append_pose_by_jump does.
+
+    No alignment, fold tree not smoothed, can take a single pose, returns a copy
+    """
+    assert bool(len(poses)), "number of input poses must be greater than 0"
+    target = _pyrosetta.rosetta.core.pose.Pose()
+    target.detached_copy(poses[0])
+    if rechain:
+        for i, pose in enumerate(poses[1:], 1):
+            target.append_pose_by_jump(pose, i)
+        target.conformation().chains_from_termini()
+    else:
+        for pose in poses[1:]:
+            _pyrosetta.rosetta.core.pose.append_pose_to_pose(
+                target, pose, False
+            )
+    return target
+
+
+def trim_pose_to_term(pose, target, terminus=None):
+    """
+    Removes residues from start to chosen terminus, returns the pose
+
+    terminus must be "chain_begin" or "chain_end"
+    """
+    assert bool(
+        terminus == "chain_begin" or terminus == "chain_end"
+    ), "terminus must be specified as 'chain_begin' or 'chain_end'"
+    assert bool(pose.chains() == 1), "input pose must be a single chain"
+
+    if terminus == "chain_begin":
+        if target > 1:
+            pose.delete_residue_range_slow(1, target)
+
+        # And if it is the terminus, remove the terminus VariantType
+        elif pose.residue(target).has_variant_type(
+            _pyrosetta.rosetta.core.chemical.VariantType.LOWER_TERMINUS_VARIANT
+        ):
+            _pyrosetta.rosetta.core.conformation.remove_lower_terminus_type_from_conformation_residue(
+                pose.conformation(), target
+            )
+
+    if terminus == "chain_end":
+        if target < len(pose.resdiues):
+            pose.delete_residue_range_slow(target, len(pose.resdiues))
+
+        # And if it is the terminus, remove the terminus VariantType
+        elif pose.residue(target).has_variant_type(
+            _pyrosetta.rosetta.core.chemical.VariantType.UPPER_TERMINUS_VARIANT
+        ):
+            _pyrosetta.rosetta.core.conformation.remove_upper_terminus_type_from_conformation_residue(
+                pose.conformation(), target
+            )
+
+    return pose
+
+
+def insert_pose_as_chain_terminus(
+    pose, in_pose, target, terminus=None, smooth=False
+):
+    """
+    Returns a pose with the in_pose appended as the terminus at resnum "target"
+
+    Specify chain_begin or chain_end for terminus to get it as N term or C term
+    respectively
+
+    Smooth not yet implemented
+    """
+    if smooth:
+        raise NotImplementedError(
+            "Sorry, fold tree smoothing not implemented yet"
+        )
+    target_pose = _pyrosetta.rosetta.core.pose.Pose()
+    target_pose.detached_copy(pose)
+    chain_num = target_pose.chain(target)
+    chain = target_pose.chain(target)
+    trimmed = trim_pose_to_term(
+        chain, posnum_in_chain(target_pose, target), terminus=terminus
+    )
+    inserted = (
+        link_poses(in_pose, trimmed)
+        if terminus == "chain_begin"
+        else link_poses(trimmed, in_pose)
+    )
+
+    new_chains = (
+        chain if i != chain_num else inserted
+        for i, chain in enumerate(chains, 1)
+    )
+    return link_poses(*new_chains, rechain=True)
+
+
+def insert_pose(target_pose, in_pose, start=0, end=0, smooth=False):
+    """
+    Returns a pose with the in_pose inserted from start to end
+
+    If start and end are on different chains, residues are removed up to the
+    last residue of "start"'s chain number, and from the beginning of "end"'s
+    chain up to "end". If end is "0" in_pose is appended
+
+    leaves in the cutpoints and jumps at the beginning and end of the insertion
+    unless smooth is set. If the insertion joins two chains, smooth
+    converts them to a single peptide edge and keeps any jumps. It does not
+    yet support cyclic peptides.
+
+    This function only adds residues by bond at the given sites, it does not
+    search, align, or superimpose.
+
+    This function is not responsible for deleting any poses you feed it.
+    """
+    if smooth:
+        raise NotImplementedError(
+            "Sorry, fold tree smoothing not implemented yet"
+        )
+    pose = target_pose.clone()
+    pose_len = len(pose.residues)
+    assert bool(start or end), "must specify start, end or both"
+
+    # This should maybe just not be supported, but this function wraps
+    # insert_pose_as_chain_terminus
+    if not end or not start:
+        return insert_pose_as_chain_terminus(
+            chain,
+            in_pose,
+            start if start else end,
+            terminus="chain_end" if start else "chain_begin",
+            smooth=smooth,
+        )
+
+    assert bool(
+        start <= pose_len
+    ), "Start residue for grafting may not be greater \
+    than the number of residues in the pose"
+
+    assert bool(
+        end <= pose_len
+    ), "End residue for grafting may not be greater \
+    than the number of residues in the pose"
+
+    linked_pose = _pyrosetta.rosetta.core.pose.Pose()
+    start_chain = pose.chain(start)
+    end_chain = pose.chain(end)
+
+    # Case for insertion into a single chain
+    if start_chain == end_chain:
+        if end < start:
+            raise NotImplementedError(
+                "end < start and on one chain. \
+                Cyclic peptides are not yet supported"
+            )
+
+        # split out the desired chain
+        chains = pose.split_by_chain()
+        target_chain = chains[start_chain]
+
+        # cut out the region and splice in the new fragment
+        cut = add_cut(target_chain, end, True)
+        cut.delete_residue_range_slow(start, end)
+        cut_halves = cut.split_by_chain()
+        ncut, ccut = cut_halves[1], cut_halves[2]
+        inserted = link_poses(ncut, in_pose, ccut)
+
+        # combine it all into one chain
+        new_chains = (
+            chain if i != start_chain else inserted
+            for i, chain in enumerate(chains, 1)
+        )
+        linked_pose = link_poses(*new_chains, rechain=True)
+    # insertion connecting two chains
+    else:
+        chains = pose.split_by_chain()
+        n_chain = trim_pose_to_term(
+            chains[start_chain],
+            posnum_in_chain(pose, start),
+            terminus="chain_end",
+        )
+        c_chain = trim_pose_to_term(
+            chains[end_chain],
+            posnum_in_chain(pose, end),
+            terminus="chain_begin",
+        )
+        inserted = link_poses(n_chain, in_pose, c_chain)
+        new_chains = (
+            chain if i != start_chain else inserted
+            for i, chain in enumerate(chains, 1)
+            if i != end_chain
+        )
+        linked_pose = link_poses(*new_chains, rechain=True)
+    # maybe smooth fold tree here
 
 
 def chain_break(pose, index):
