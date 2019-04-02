@@ -233,6 +233,7 @@ def insert_pose(target_pose, in_pose, start=0, end=0, smooth=False):
         )
         linked_pose = link_poses(*new_chains, rechain=True)
     # maybe smooth fold tree here
+    return linked_pose
 
 
 def chain_break(pose, index):
