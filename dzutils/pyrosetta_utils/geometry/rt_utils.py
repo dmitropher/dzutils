@@ -78,3 +78,11 @@ def residue_pep_rt_dist_sq(source_res1, dest_res1, source_res2, dest_res2):
     return peptide_bond_rt(source_res1, dest_res1).distance_squared(
         peptide_bond_rt(source_res2, dest_res2)
     )
+
+
+def rt_magnitude(rt1, rt2):
+    """
+    Returns the rt magnitude between the two rts Not working yet
+
+    Uses the
+    """
