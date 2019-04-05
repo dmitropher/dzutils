@@ -1,6 +1,42 @@
 import pyrosetta as _pyrosetta
 
 
+def chains_with_resname(pose, resname):
+    """
+    Takes a pose and a residue name, returns a list of chains with that residue
+    """
+    residue_name_selector = (
+        _pyrosetta.rosetta.core.select.residue_selector.ResidueNameSelector()
+    )
+    residue_name_selector.set_residue_names(resname)
+    vec = residue_name_selector.apply(pose)
+    chains_redundant = [
+        pose.chain(i) for i, is_selected in enumerate(vec, 1) if (is_selected)
+    ]
+    return list(set(chains_redundant))
+
+
+def pose_from_chain(pose, chain):
+    """
+    Returns a pose consisting of just the input chain
+
+    Basically just a wrapper to make code prettier, slightly slower than just
+    invoking the bound method directly.
+    """
+    return pose.split_by_chain()[chain]
+
+
+def pose_excluding_chain(pose, chain):
+    """
+    Returns a pose without the listed chain
+    """
+    chains = [p for i, p in enumerate(pose.split_by_chain(), 1) if i != chain]
+    new_pose = chains[0]
+    for i, chain in enumerate(chains[1:], 1):
+        new_pose.append_pose_by_jump(chain, i)
+    return new_pose
+
+
 def posnum_in_chain(pose, resnum):
     """
     returns resnum - pose.chain_begin(resnum) + 1

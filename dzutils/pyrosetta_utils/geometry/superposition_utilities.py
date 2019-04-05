@@ -62,3 +62,52 @@ def super_resi_by_bb(mob_pose, targ_pose, mob_index, targ_index):
         ref_coords.append(targ_res.xyz(atom))
     superposition_pose(mob_pose, init_coords, ref_coords)
     return mob_pose
+
+
+def align_to_tetrahedral_rotation(mob_pose, mob_resnum, rotation=0, *args):
+    """
+    Align the pose to a rotation of the atoms specified
+
+    only for tetrahedral symmetric rotations
+    helper function for enumerating all tetrahedral symmetries
+
+    rotations are numbered from 0-11, with wraparound
+
+    Uses the rosetta toolbox superpostion transform, not the inverse RT method
+    """
+    if len(args) > 4:
+        raise AssertionError("This function is for tetrahedral symmetry only")
+
+    init_coords = (
+        _pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
+    )
+
+    ref_coords = (
+        _pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
+    )
+
+    nub_res = mob_pose.residue(mob_resnum)
+
+    # modulo arithmetic to change what's aligned to what
+    fixed_point = rotation % 4
+    face_rotation = rotation // 4 % 3
+    rotated_args = [
+        args[
+            ((i + fixed_point) % 4) * ((fixed_point + 1) % 2)
+            + ((fixed_point - i) % 4) * ((fixed_point) % 2)
+        ]
+        for i in range(4)
+    ]
+    for i in range(4):
+        targ = (
+            rotated_args[0]
+            if i == 0
+            else rotated_args[1:][(i + face_rotation - 1) % 3]
+        )
+        init = args[i]
+        init_coords.append(nub_res.xyz(targ))
+        ref_coords.append(nub_res.xyz(init))
+    superposition_pose(mob_pose, init_coords, ref_coords)(
+        mob_pose, init_coords, ref_coords
+    )
+    return mob_pose
