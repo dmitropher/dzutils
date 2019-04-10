@@ -75,11 +75,11 @@ class ChiAtomCircle:
         hyp_vec = atom_xyz - chi_origin
         hyp_norm = _np.linalg.norm(hyp_vec)
         unit_hyp_vec = hyp_vec / hyp_norm
-        cos_theta = unit_chi_vec * unit_hyp_vec
+        cos_theta = _np.dot(unit_chi_vec, unit_hyp_vec)
         self._normal_vector = unit_chi_vec
         self._circle_origin = chi_origin + unit_chi_vec * cos_theta * hyp_norm
         self._circle_radius = (
-            _np.linalg.norm(_np.cross(self._normal_vector, unit_hyp_vec))
+            _np.linalg.norm(_np.cross(unit_hyp_vec, self._normal_vector))
             * hyp_norm
         )
 
@@ -91,14 +91,15 @@ class ChiAtomCircle:
         convenient coordinates for non-tensor linear algebra
         """
         try:
-            translation = self._circle_origin
+
             # if the circle normal is the negative of the xy normal,
-            # then the other equation doesn't work, this hardcode works fine tho
+            # identity works
             if _np.array_equal(self._normal_vector, _np.array([0, 0, -1])):
-                rotation = _np.array([[-1, 0, 0], [0, 1, 0], [0, 0, -1]])
+                rotation = _np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
                 self._rt_to_xy = _rt_to_homog(
                     rotation, _np.transpose(translation)
                 )
+                translation = -1 * (self._circle_origin)
                 self._rt_to_xy = _to_homog(rotation, translation)
                 return self._rt_to_xy
             else:
@@ -116,8 +117,9 @@ class ChiAtomCircle:
                     + ortho_x
                     + ortho_x
                     @ ortho_x
-                    * (1 / (1 - (self._normal_vector * xy_unit_normal)))
+                    * (1 / (1 + _np.dot(self._normal_vector, xy_unit_normal)))
                 )
+                translation = rotation @ (-1 * (self._circle_origin))
                 self._rt_to_xy = _to_homog(rotation, translation)
                 return self._rt_to_xy
         except AttributeError as ae:
