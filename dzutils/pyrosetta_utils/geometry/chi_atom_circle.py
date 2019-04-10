@@ -77,7 +77,7 @@ class ChiAtomCircle:
         unit_hyp_vec = hyp_vec / hyp_norm
         cos_theta = unit_chi_vec * unit_hyp_vec
         self._normal_vector = unit_chi_vec
-        self._circle_origin = chi_origin + unit_chi_vec * cos_theta
+        self._circle_origin = chi_origin + unit_chi_vec * cos_theta * hyp_norm
         self._circle_radius = (
             _np.linalg.norm(_np.cross(self._normal_vector, unit_hyp_vec))
             * hyp_norm
@@ -126,7 +126,7 @@ class ChiAtomCircle:
 
     def get_radius(self):
         """
-        Returns the radius of the circle the atom can be in
+        Returns the radius of the circle of allowed atom positions
 
         Computes the radius, normal, and circle ori if they not yet computed
         """
@@ -138,7 +138,7 @@ class ChiAtomCircle:
 
     def get_circle_origin(self):
         """
-        Returns the origin of the circle the atom can be in
+        Returns the origin of the circle of allowed atom positions
 
         Computes the radius, normal, and circle ori if they not yet computed
         """
@@ -150,7 +150,7 @@ class ChiAtomCircle:
 
     def get_normal_vector(self):
         """
-        Returns the normal vector of the circle the atom can be in
+        Returns the unit normal vector of the circle of allowed atom positions
 
         Computes the radius, normal, and circle ori if they not yet computed
         """
