@@ -4,6 +4,17 @@ from dzutils.pyrosetta_utils.geometry.rt_utils import (
 )
 
 
+def np_rot_trans_to_homog(rotation, translation):
+    """
+    Basic wrapper to turn 3x3 and 1x3 to 4x4 homog xform
+    """
+    homog = _numpy.empty([4, 4])
+    homog[..., :3, :3] = rotation
+    homog[:3, 3] = translation
+    homog[..., 3, :] = [0, 0, 0, 1]
+    return homog
+
+
 def rotation_translation_to_homog(rotation, translation):
     """
     Takes a rotation matrix and a translation vector and returns a h xform
