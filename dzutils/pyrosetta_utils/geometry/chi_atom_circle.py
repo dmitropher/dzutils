@@ -170,4 +170,4 @@ class ChiAtomCircle:
             return self._rt_to_xy
         except AttributeError as no_rad:
             self.compute_rt_to_xy()
-            return self._rt_to_xy()
+            return self._rt_to_xy
