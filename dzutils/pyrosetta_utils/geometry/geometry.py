@@ -12,6 +12,6 @@ def projection(point, plane_point, plane_normal):
     The orthogonal projection is just point - (normal * height)
     """
     unit_normal = plane_normal / _np.linalg.norm(plane_normal)
-    dist = _np.inner(unit_normal, (point - plane_point))
-    projection = point - unit_normal * dist
+    dist = _np.dot((point - plane_point), unit_normal)
+    projection = point - dist * unit_normal
     return projection
