@@ -23,6 +23,7 @@ class ChiAtomCircle:
         Default atom is CA, best used to search for inverse rotamers
         """
         # set chi,atom,residue variables
+
         self._chi = chi_num
         self._residue = residue.clone()
         self._chi_atoms = [
