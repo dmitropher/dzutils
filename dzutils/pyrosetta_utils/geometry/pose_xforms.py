@@ -32,7 +32,9 @@ class PoseRTArray(_np.ndarray):
         atoms_start=("CA", "N", "CA", "C"),
         atoms_end=("CA", "N", "CA", "C"),
     ):
-        if type(stub_xform1) != None and type(stub_xform2) != None:
+        if not isinstance(stub_xform1, type(None)) and not isinstance(
+            stub_xform2, type(None)
+        ):
             obj = _np.asarray(_stubs_to_rt(stub_xform1, stub_xform2)).view(cls)
         else:
             stub_xform1 = _stub_to_homog(
@@ -41,7 +43,7 @@ class PoseRTArray(_np.ndarray):
                 )
             )
             stub_xform2 = _stub_to_homog(
-                _stub_from_residue(pose_end.residue(seqpos_start), *atoms_end)
+                _stub_from_residue(pose_end.residue(seqpos_end), *atoms_end)
             )
             obj = _np.asarray(_stubs_to_rt(stub_xform1, stub_xform2)).view(cls)
         obj.pose_start = pose_start
