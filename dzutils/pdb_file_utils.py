@@ -16,7 +16,7 @@ def files_in_dir_by_ext(directory, ext):
     ignores files beginning with "."
     """
     output = [
-        root + f
+        root + "/" + f
         for root, dirs, fs in _os.walk(directory, followlinks=True)
         for f in fs
         if f.split(".")[-1] == ext and f.split(".")[0]
