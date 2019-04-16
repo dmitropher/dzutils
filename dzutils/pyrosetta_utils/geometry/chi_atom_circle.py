@@ -183,6 +183,8 @@ class ChiAtomCircle:
     def closest_point(self, target):
         """
         Returns a numpy vector of the xyz for the closest point on the CAC
+
+        Must input a numpy array with xyz as target
         """
         return _closest(
             target,
@@ -195,19 +197,23 @@ class ChiAtomCircle:
         """
         returns the distance to the closest point on the circle to target
         """
-        return _np.linalg.norm(target - closest_point(target))
+        return _np.linalg.norm(target - self.closest_point(target))
 
     def chi_to_get_closest(self, target):
         """
         Returns the chi angle that gives the closest point on the circle
         """
-        closest = closest_point(target)
+        closest = self.closest_point(target)
         atom_xyz = _np.array(
-            [self._atom_xyz.x(), self._atom_xyz.y(), self._atom_xyz.z()]
+            [self._atom_xyz.x, self._atom_xyz.y, self._atom_xyz.z]
         )
-        input_chi = self._chi
-        orig_to_atom = atom_xyz - self.get_circle_origin()
-        orig_to_closest = closest - self.get_circle_origin()
-        delta_theta = vector_theta(orig_to_closest, orig_to_atom)
-        new_chi = input_chi + delta_theta
+        input_chi = self._residue.chi(self._chi)
+        origin = self.get_circle_origin()
+        orig_to_atom = atom_xyz - origin
+        orig_to_closest = closest - origin
+        reference = _np.cross(orig_to_closest, orig_to_atom)
+        direction = _np.dot(unit_vec(reference), self.get_normal_vector())
+        delta_theta = direction * vector_theta(orig_to_closest, orig_to_atom)
+        # this probably breaks for non inverse rotamers??
+        new_chi = input_chi - delta_theta
         return new_chi
