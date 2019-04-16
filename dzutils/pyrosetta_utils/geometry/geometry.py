@@ -1,6 +1,13 @@
 import numpy as _np
 
 
+def unit_vec(vec):
+    """
+    Returns the vector divided by its mag
+    """
+    return vec / _np.linalg.norm(vec)
+
+
 def projection(point, plane_point, plane_normal):
     """
     Returns the projection of the given point onto the plane
@@ -28,3 +35,14 @@ def closest_point_on_circle(point, center, normal, radius):
     unit = to_proj / _np.linalg.norm(to_proj)
     closest_point = unit * radius + center
     return closest_point
+
+
+def vector_theta(vec_1, vec_2, radians=False):
+    """
+    Returns the theta between vec_1 and vec_2
+    """
+    cos_theta = _np.dot(unit_vec(vec_1), unit_vec(vec_2))
+    if radians:
+        return _np.clip(_np.arccos(cos_theta, -1, 1))
+
+    return _np.degrees(_np.clip(_np.arccos(cos_theta, -1, 1)))

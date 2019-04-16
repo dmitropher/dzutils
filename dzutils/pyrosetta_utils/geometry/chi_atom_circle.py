@@ -2,6 +2,11 @@ import numpy as _np
 from dzutils.pyrosetta_utils.geometry.homog import (
     np_rot_trans_to_homog as _to_homog,
 )
+from dzutils.pyrosetta_utils.geometry import (
+    closest_point_on_circle as _closest,
+    vector_theta as vector_theta,
+    unit_vec as unit_vec,
+)
 
 # Do for every dock
 # save the inverse rotamer circle as just radius, point and unit normal vector
@@ -174,3 +179,35 @@ class ChiAtomCircle:
         except AttributeError as no_rad:
             self.compute_rt_to_xy()
             return self._rt_to_xy
+
+    def closest_point(self, target):
+        """
+        Returns a numpy vector of the xyz for the closest point on the CAC
+        """
+        return _closest(
+            target,
+            self.get_circle_origin(),
+            self.get_normal_vector(),
+            self.get_radius(),
+        )
+
+    def distance_to_closest(self, target):
+        """
+        returns the distance to the closest point on the circle to target
+        """
+        return _np.linalg.norm(target - closest_point(target))
+
+    def chi_to_get_closest(self, target):
+        """
+        Returns the chi angle that gives the closest point on the circle
+        """
+        closest = closest_point(target)
+        atom_xyz = _np.array(
+            [self._atom_xyz.x(), self._atom_xyz.y(), self._atom_xyz.z()]
+        )
+        input_chi = self._chi
+        orig_to_atom = atom_xyz - self.get_circle_origin()
+        orig_to_closest = closest - self.get_circle_origin()
+        delta_theta = vector_theta(orig_to_closest, orig_to_atom)
+        new_chi = input_chi + delta_theta
+        return new_chi
