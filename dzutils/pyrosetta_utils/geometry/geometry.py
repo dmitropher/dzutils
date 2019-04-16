@@ -43,6 +43,6 @@ def vector_theta(vec_1, vec_2, radians=False):
     """
     cos_theta = _np.dot(unit_vec(vec_1), unit_vec(vec_2))
     if radians:
-        return _np.clip(_np.arccos(cos_theta, -1, 1))
+        return _np.arccos(_np.clip(cos_theta, -1, 1))
 
-    return _np.degrees(_np.clip(_np.arccos(cos_theta, -1, 1)))
+    return _np.degrees(_np.arccos(_np.clip(cos_theta, -1, 1)))
