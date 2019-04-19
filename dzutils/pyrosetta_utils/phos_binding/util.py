@@ -1,4 +1,4 @@
-import _pyrosetta.rosetta as _pyr
+import pyrosetta.rosetta as _pyr
 
 
 def hbond_to_residue(pose, residue, vec=False):

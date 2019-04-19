@@ -1,4 +1,4 @@
-import _pyrosetta.rosetta as _pyr
+import pyrosetta.rosetta as _pyr
 
 
 def residues_by_name(pose, *names, include_res=False):
