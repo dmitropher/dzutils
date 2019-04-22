@@ -122,3 +122,36 @@ class PoseStubArray(_np.ndarray):
             atoms_end=stub._atoms,
         )
         return rt_array
+
+
+def generate_pose_rt(
+    pose_1,
+    pose_2,
+    resnum_1,
+    resnum_2,
+    atoms_1=("CA", "N", "CA", "C"),
+    atoms_2=("CA", "N", "CA", "C"),
+):
+    """
+    Convenience wrapper: returns the PoseRTArray for two poses etc
+
+    Written to shorten syntax a bit; defaults to bb atoms
+    """
+    return PoseStubArray(
+        pose=pose_1, seqpos=resnum_1, atoms=atoms_1
+    ).get_rt_to_stub(
+        PoseStubArray(pose=pose_2, seqpos=resnum_2, atoms=atoms_2)
+    )
+
+
+def generate_pose_rt_between_res(
+    pose,
+    resnum_1,
+    resnum_2,
+    atoms_1=("CA", "N", "CA", "C"),
+    atoms_2=("CA", "N", "CA", "C"),
+):
+    """
+    Convenience wrapper: defines RT between different residues of the same pose
+    """
+    return generate_pose_rt(pose, pose, resnum_1, resnum_2, atoms_1, atoms_2)
