@@ -8,6 +8,7 @@ from dzutils.pyrosetta_utils.geometry.homog import (
 from dzutils.pyrosetta_utils.geometry.rt_utils import (
     stub_from_residue as _stub_from_residue,
 )
+import pyrosetta.rosetta as _pyr
 
 
 class PoseRTArray(_np.ndarray):
@@ -64,6 +65,44 @@ class PoseRTArray(_np.ndarray):
         self._atoms_start = getattr(obj, "atoms_start", None)
         self._atoms_end = getattr(obj, "atoms_end", None)
 
+    def __reduce__(self):
+        # Get the parent's __reduce__ tuple
+        pickled_state = super(PoseRTArray, self).__reduce__()
+        # Create our own tuple to pass to __setstate__
+        new_state = pickled_state[2] + (
+            self.pose_start,
+            self.pose_end,
+            self.seqpos_start,
+            self.seqpos_end,
+            self._atoms_start,
+            self._atoms_end,
+        )
+        return (pickled_state[0], pickled_state[1], new_state)
+
+    def __setstate__(self, state):
+        self._atoms_end = state[-1]  # Set our attributes
+        self._atoms_start = state[-2]
+        self.seqpos_end = state[-3]
+        self.seqpos_start = state[-4]
+        self.pose_end = state[-5]
+        self.pose_start = state[-6]
+        # Call the parent's __setstate__ with the other tuple elements.
+        super(PoseRTArray, self).__setstate__(state[0:-6])
+
+    def minimal_pose(self):
+        """
+        Changes the pose_start and pose_end to a single pose with two residues
+
+        Residue 1 is the residue at seqpos_start 2 is the one at seqpos_end
+        """
+        pose = _pyr.core.pose.Pose()
+        pose.append_residue_by_bond(self.pose_start.residue(self.seqpos_start))
+        pose.append_residue_by_jump(self.pose_end.residue(self.seqpos_end), 1)
+        self.pose_start = pose
+        self.pose_end = pose
+        self.seqpos_start = 1
+        self.seqpos_end = 2
+
 
 class PoseStubArray(_np.ndarray):
     """
@@ -85,6 +124,20 @@ class PoseStubArray(_np.ndarray):
         self.pose = getattr(obj, "pose", None)
         self.seqpos = getattr(obj, "seqpos", None)
         self._atoms = getattr(obj, "atoms", None)
+
+    def __reduce__(self):
+        # Get the parent's __reduce__ tuple
+        pickled_state = super(PoseStubArray, self).__reduce__()
+        # Create our own tuple to pass to __setstate__
+        new_state = pickled_state[2] + (self.pose, self.seqpos, self._atoms)
+        return (pickled_state[0], pickled_state[1], new_state)
+
+    def __setstate__(self, state):
+        self._atoms = state[-1]  # Set our attributes
+        self.seqpos = state[-2]
+        self.pose = state[-3]
+        # Call the parent's __setstate__ with the other tuple elements.
+        super(PoseStubArray, self).__setstate__(state[0:-3])
 
     def set_atoms(self, atoms):
         """
@@ -131,17 +184,23 @@ def generate_pose_rt(
     resnum_2,
     atoms_1=("CA", "N", "CA", "C"),
     atoms_2=("CA", "N", "CA", "C"),
+    minimal=False,
 ):
     """
     Convenience wrapper: returns the PoseRTArray for two poses etc
 
     Written to shorten syntax a bit; defaults to bb atoms
     """
-    return PoseStubArray(
+    pose_rt_array = PoseStubArray(
         pose=pose_1, seqpos=resnum_1, atoms=atoms_1
     ).get_rt_to_stub(
         PoseStubArray(pose=pose_2, seqpos=resnum_2, atoms=atoms_2)
     )
+    if minimal:
+        pose_rt_array.minimal_pose()
+        return pose_rt_array
+    else:
+        return pose_rt_array
 
 
 def generate_pose_rt_between_res(
@@ -150,8 +209,16 @@ def generate_pose_rt_between_res(
     resnum_2,
     atoms_1=("CA", "N", "CA", "C"),
     atoms_2=("CA", "N", "CA", "C"),
+    minimal=False,
 ):
     """
     Convenience wrapper: defines RT between different residues of the same pose
     """
-    return generate_pose_rt(pose, pose, resnum_1, resnum_2, atoms_1, atoms_2)
+    pose_rt_array = generate_pose_rt(
+        pose, pose, resnum_1, resnum_2, atoms_1, atoms_2
+    )
+    if minimal:
+        pose_rt_array.minimal_pose()
+        return pose_rt_array
+    else:
+        return pose_rt_array

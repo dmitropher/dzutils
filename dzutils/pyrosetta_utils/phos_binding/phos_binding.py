@@ -4,7 +4,7 @@ from .util import hbond_to_residue as _hbond_to_residue
 from ..geometry.pose_xforms import *
 
 
-def rt_list_hbond_to_res(pose, resnum, sidechain=False):
+def rt_list_hbond_to_res(pose, resnum, sidechain=False, minimal=False):
     """
     Returns a list of hbonds to the given residue number
 
@@ -23,6 +23,7 @@ def rt_list_hbond_to_res(pose, resnum, sidechain=False):
                 "CA",
                 "C",
             ),
+            minimal=minimal,
         )
         for hbond in _hbond_to_residue(pose, resnum)
         if sidechain or hbond.don_hatm_is_protein_backbone()
