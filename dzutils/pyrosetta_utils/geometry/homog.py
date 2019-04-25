@@ -116,13 +116,12 @@ def xform_magnitude(xform, radius_of_gyration=None):
     """
     # Find squared norm of translation
     translation = xform[..., 3:][:-1]
-    tnorm = _numpy.norm(translation)
+    tnorm = _numpy.linalg.norm(translation)
     if not radius_of_gyration:
         radius_of_gyration = tnorm
-    err_trans2 = tnorm ** 2
 
     # Use clever trace hack to get cos( rotation_matrix().angle() )
-    cos_theta = (translation[0] + translation[1] + translation[2] - 1.0) / 2.0
+    cos_theta = (xform[0][0] + xform[1][1] + xform[2][2] - 1.0) / 2.0
 
     # Calculate the sin() and then multiply by radius of gyration to get the rotation distance
     # Just use rg if we go past 90 degrees
@@ -133,6 +132,6 @@ def xform_magnitude(xform, radius_of_gyration=None):
     )
 
     # Combine the distances
-    err = _math.sqrt(err_trans2 + err_rot ** 2)
+    err = _math.sqrt(tnorm ** 2 + err_rot ** 2)
 
     return err
