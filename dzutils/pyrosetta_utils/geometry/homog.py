@@ -1,4 +1,5 @@
 import numpy as _numpy
+import math as _math
 from dzutils.pyrosetta_utils.geometry.rt_utils import (
     stub_from_residue as _stub_from_residue,
 )
@@ -102,3 +103,36 @@ def superimpose_stub_by_rt(stub1, stub2, rt):
     return super_from_rt(
         stub_to_homog(stub1), stub_to_homog(stub2), rt_to_homog(rt)
     )
+
+
+def xform_magnitude(xform, radius_of_gyration=None):
+    """
+    Takes the magnitude of rotation and translation of the xform
+
+    radius of gyration is just set to the norm of the translation vector if
+    left unset
+
+    Stolen from bcov's xform mag in rosetta (looks real different in python)
+    """
+    # Find squared norm of translation
+    translation = xform[..., 3:][:-1]
+    tnorm = _numpy.norm(translation)
+    if not radius_of_gyration:
+        radius_of_gyration = tnorm
+    err_trans2 = tnorm ** 2
+
+    # Use clever trace hack to get cos( rotation_matrix().angle() )
+    cos_theta = (translation[0] + translation[1] + translation[2] - 1.0) / 2.0
+
+    # Calculate the sin() and then multiply by radius of gyration to get the rotation distance
+    # Just use rg if we go past 90 degrees
+    err_rot = (
+        radius_of_gyration
+        if cos_theta < 0
+        else _math.sqrt(max(0.0, 1.0 - cos_theta ** 2)) * radius_of_gyration
+    )
+
+    # Combine the distances
+    err = _math.sqrt(err_trans2 + err_rot ** 2)
+
+    return err
