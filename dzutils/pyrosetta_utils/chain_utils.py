@@ -108,7 +108,7 @@ def trim_pose_to_term(pose, target, terminus=None):
     assert bool(
         terminus == "chain_begin" or terminus == "chain_end"
     ), "terminus must be specified as 'chain_begin' or 'chain_end'"
-    assert bool(pose.chains() == 1), "input pose must be a single chain"
+    assert bool(pose.num_chains() == 1), "input pose must be a single chain"
 
     if terminus == "chain_begin":
         if target > 1:
@@ -123,8 +123,8 @@ def trim_pose_to_term(pose, target, terminus=None):
             )
 
     if terminus == "chain_end":
-        if target < len(pose.resdiues):
-            pose.delete_residue_range_slow(target, len(pose.resdiues))
+        if target < len(pose.residues):
+            pose.delete_residue_range_slow(target, len(pose.residues))
 
         # And if it is the terminus, remove the terminus VariantType
         elif pose.residue(target).has_variant_type(
