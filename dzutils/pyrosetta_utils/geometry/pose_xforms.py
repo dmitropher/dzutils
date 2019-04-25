@@ -185,38 +185,59 @@ class RotamerRTArray:
     where base is the coordinate frame of the transform and target is
     the R group atoms of interest.
 
+
     Defaults to the N,CA,C for the base atoms
     """
 
-    def __new__(cls, pose=None, seqpos=None, atoms=("CA", "N", "CA", "C")):
-        # obj = _np.asarray(
-        #     _stub_to_homog(_stub_from_residue(pose.residue(seqpos), *atoms))
-        # ).view(cls)
-        # obj.pose = pose
-        # obj.seqpos = seqpos
-        # obj._atoms = atoms
+    def __new__(
+        cls, residue=None, base_atoms=("N", "CA", "C"), target_atoms=None
+    ):
+        # make the rt from base to target atoms, store it as the 2d array
+        obj = _np.asarray(
+            _stubs_to_rt(
+                _stub_to_homog(_stub_from_residue(residue, *base_atoms)),
+                _stub_to_homog(_stub_from_residue(residue, *target_atoms)),
+            )
+        ).view(cls)
+        # generate a blank pose and add our residue into it
+        # Residue objects don't update xyz with chi, this is sort of a hack to
+        # avoid reimplementing internal coordinate stuff
+        pose = _pyr.core.pose.Pose()
+        pose.append_residue_by_bond(residue)
+        res = pose.residue(1)
+        obj.residue = res
+        obj._pose = pose
+        obj._target_atoms = target_atoms
+        obj._base_atoms = base_atoms
         return obj
 
     def __array_finalize__(self, obj):
         if obj is None:
             return
-        # self.pose = getattr(obj, "pose", None)
-        # self.seqpos = getattr(obj, "seqpos", None)
-        # self._atoms = getattr(obj, "atoms", None)
+        self._pose = getattr(obj, "_pose", None)
+        self.residue = getattr(obj, "residue", None)
+        self._target_atoms = getattr(obj, "_target_atoms", None)
+        self._base_atoms = getattr(obj, "_base_atoms", None)
 
     def __reduce__(self):
         # Get the parent's __reduce__ tuple
-        # pickled_state = super(PoseStubArray, self).__reduce__()
+        pickled_state = super(RotamerRTArray, self).__reduce__()
         # # Create our own tuple to pass to __setstate__
-        # new_state = pickled_state[2] + (self.pose, self.seqpos, self._atoms)
+        new_state = pickled_state[2] + (
+            self._pose,
+            self.residue,
+            self._target_atoms,
+            self._base_atoms,
+        )
         return (pickled_state[0], pickled_state[1], new_state)
 
     def __setstate__(self, state):
-        # self._atoms = state[-1]  # Set our attributes
-        # self.seqpos = state[-2]
-        # self.pose = state[-3]
+        self._base_atoms = state[-1]  # Set our attributes
+        self._target_atoms = state[-2]
+        self.residue = state[-3]
+        self._pose = state[-4]
         # Call the parent's __setstate__ with the other tuple elements.
-        super(PoseStubArray, self).__setstate__(state[0:-3])
+        super(RotamerRTArray, self).__setstate__(state[0:-4])
 
     def set_target_atoms(self, atoms):
         """
@@ -224,7 +245,21 @@ class RotamerRTArray:
 
         Recomputes the h transform
         """
-        # Stuff here
+        self._target_atoms = atoms
+        _np.place(
+            self,
+            _np.ones_like(self),
+            _np.asarray(
+                _stubs_to_rt(
+                    _stub_to_homog(
+                        _stub_from_residue(self.residue, *self._base_atoms)
+                    ),
+                    _stub_to_homog(
+                        _stub_from_residue(self.residue, *self._target_atoms)
+                    ),
+                )
+            ),
+        )
 
     def set_base_atoms(self, atoms):
         """
@@ -232,13 +267,27 @@ class RotamerRTArray:
 
         Recomputes the h transform
         """
-        # Stuff here
+        self._base_atoms = atoms
+        _np.place(
+            self,
+            _np.ones_like(self),
+            _np.asarray(
+                _stubs_to_rt(
+                    _stub_to_homog(
+                        _stub_from_residue(self.residue, *self._base_atoms)
+                    ),
+                    _stub_to_homog(
+                        _stub_from_residue(self.residue, *self._target_atoms)
+                    ),
+                )
+            ),
+        )
 
     def get_chi(self, chi_num):
         """
         Returns the given chi
         """
-        return chi
+        return self._pose.chi(chi_num, 1)
 
     def get_chi_list(self):
         """
@@ -246,11 +295,26 @@ class RotamerRTArray:
 
         Sorry, 0-indexed
         """
-        return chi_list
+        return [
+            self.get_chi(chi_num)
+            for chi_num in range(1, self.residue.nchi() + 1)
+        ]
+
+    def get_pose_stub_array(self, base=True):
+        """
+        Returns the PoseStubArrray for base by default, target otherwise
+        """
+        return PoseStubArray(
+            pose=self._pose,
+            seqpos=1,
+            atoms=self._base_atoms if base else self._target_atoms,
+        )
 
     def get_rt_to_stub(self, stub):
         """
-        Returns homogxform ndarray describing the rt to the stub from base atoms
+        Returns PoseRTArray ndarray describing the rt from base atoms to stub
+
+        Supports rosetta stubs or 4X4 numpy arrays
 
         Creates a local rotation translation homogeneous transform
         returns a wrapper object that saves the pose, seqpos, and atoms that the
@@ -259,9 +323,11 @@ class RotamerRTArray:
         # Stuff here
         return rt_array
 
-    def get_rt_from_target(self, new_target):
+    def get_rt_from_target(self, stub):
         """
-        Returns an RT from the target stub to the given stub
+        Returns an RT from target atoms to stub
+
+        Supports rosetta stubs or 4X4 numpy arrays
         """
         # Stuff here
         return rt_array
