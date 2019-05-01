@@ -152,3 +152,18 @@ def chain_break(pose, index):
         )
     outpose.conformation().chains_from_termini()
     return outpose
+
+
+def rechain_resname(pose, resname):
+    """
+    Returns a pose where all residues of the given name are in separate chains
+    """
+    residues = residues_by_name(pose, resname)
+    target_poses = []
+    other_pose = pose.clone()
+    for res in residues:
+        res_pose = _pyrosetta.rosetta.core.pose.Pose()
+        res_pose.append_residue_by_bond(pose.residue(res))
+        target_poses.append(res_pose)
+        other_pose.delete_residue_range_slow(res, res)
+    return link_poses(other_pose, *target_poses, rechain=True)
