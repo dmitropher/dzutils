@@ -1,4 +1,5 @@
 import pyrosetta as _pyrosetta
+from .util import residues_by_name as residues_by_name
 
 
 def chains_with_resname(pose, resname):
