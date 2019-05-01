@@ -1,5 +1,6 @@
 import pyrosetta as _pyrosetta
 import itertools as _itertools
+from ..util import residues_by_name as index_list_from_residue_name
 
 
 # Atom's random rama function bind ###
@@ -167,17 +168,18 @@ def subset_CA_rmsd(
         )
 
 
-def index_list_from_residue_name(pose, resname):
-    """
-    returns a list with the residue indices of the residue with the given name
-    """
-    residue_name_selector = (
-        _pyrosetta.rosetta.core.select.residue_selector.ResidueNameSelector()
-    )
-    residue_name_selector.set_residue_names(resname)
-    vec = residue_name_selector.apply(pose)
-    indices = [i for i, is_selected in enumerate(vec, 1) if (is_selected)]
-    return indices
+#
+# def index_list_from_residue_name(pose, resname):
+#     """
+#     returns a list with the residue indices of the residue with the given name
+#     """
+#     residue_name_selector = (
+#         _pyrosetta.rosetta.core.select.residue_selector.ResidueNameSelector()
+#     )
+#     residue_name_selector.set_residue_names(resname)
+#     vec = residue_name_selector.apply(pose)
+#     indices = [i for i, is_selected in enumerate(vec, 1) if (is_selected)]
+#     return indices
 
 
 def chains_with_resname(pose, resname):
@@ -222,7 +224,7 @@ def apply_tetrahedral_rotation_to_chain(pose, chain, num, resname, atoms):
     """
     mob_pose = pose_from_chain(pose, chain)
     targ_pose = pose_excluding_chain(pose, chain)
-    rot_res = index_list_from_residue_name(pose=mob_pose, resname=resname)[0]
+    rot_res = index_list_from_residue_name(mob_pose, resname)[0]
 
     align_to_tetrahedral_rotation(mob_pose, rot_res, num, *atoms)
     targ_pose.append_pose_by_jump(mob_pose, targ_pose.num_jump() + 1)
