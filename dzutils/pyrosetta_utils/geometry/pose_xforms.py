@@ -180,7 +180,7 @@ class PoseStubArray(_np.ndarray):
         return rt_array
 
 
-class RotamerRTArray:
+class RotamerRTArray(_np.ndarray):
     """
     Contains an RT from one set of atoms to another within a single residue
 
