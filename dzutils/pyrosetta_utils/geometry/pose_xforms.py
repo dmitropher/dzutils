@@ -225,7 +225,7 @@ class RotamerRTArray(_np.ndarray):
         pickled_state = super(RotamerRTArray, self).__reduce__()
         # # Create our own tuple to pass to __setstate__
         new_state = pickled_state[2] + (
-            self.get_pose,
+            self.get_pose(),
             self._target_atoms,
             self._base_atoms,
         )
