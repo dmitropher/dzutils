@@ -1,4 +1,5 @@
 import functools as _functools
+import numpy as _np
 
 
 def compose(*functions):
@@ -34,6 +35,51 @@ def boil_generator(func, *args, **kwargs):
         return func(*args, **kwargs)
     except:
         return iter(())
+
+
+def index_to_parameters(index, *args):
+    """
+    takes tuples where (minimum,maximum,samples) and index, returns all params
+
+    Samples should be an integer value!
+    Don't take half a sample and put the rest back.
+    It's okay if the type is not int.
+    """
+    output = [
+        arg[0]
+        + ((arg[1] - arg[0] + 1) // (arg[2]))
+        * ((index // _np.prod([a[2] for a in args[:i]])) % arg[2])
+        for i, arg in enumerate(args)
+    ]
+    return output
+
+
+def index_to_pair(index, sample, radius):
+    """
+    Takes the index and the distance within that index not to pair with the index in the output,
+    returns a pair of values in the ranges allowed by sample and radius
+
+    Sample should be a tuple  (minimum,maximum,samples)  radius should be an int limiting the sampling of the paired value with that in sample
+
+    Radius of 0 means sample all pairs, radius at 1 means only use i +/- (1+) etc.
+    This docstring is jenky and confusing, and if you're using this function, you're probably doing something jenky and confusing
+
+    """
+    relative = index_to_parameters(
+        index,
+        (sample[0], sample[1], sample[2]),
+        (
+            sample[0] + radius,
+            sample[1] - radius,
+            sample[2] - (radius != 0) - 2 * (radius),
+        ),
+    )
+    absolute = [
+        relative[0],
+        (relative[0] + relative[1]) % num_residues
+        + ((relative[0] + relative[1]) % num_residues == 0) * num_residues,
+    ]
+    return absolute
 
 
 ######### The following stuff is yanked from Guido Van Rossum's blog ##########
