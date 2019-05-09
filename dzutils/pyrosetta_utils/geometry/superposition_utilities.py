@@ -38,7 +38,7 @@ def super_by_residues(mob_pose, targ_pose, mob_index, targ_index, *args):
     targ_res = targ_pose.residue(targ_index)
     num_atoms = len(args)
     if num_atoms == 0:
-        return super_resi_by_bb
+        return super_resi_by_bb(mob_pose, targ_pose, mob_index, targ_index)
     index_range = range(num_atoms)
 
     for index in index_range:
