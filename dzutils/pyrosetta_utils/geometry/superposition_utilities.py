@@ -18,6 +18,22 @@ def superposition_pose(mob_pose, init_coords, ref_coords):
     return mob_pose
 
 
+def super_resi_by_bb(mob_pose, targ_pose, mob_index, targ_index):
+    init_coords = (
+        _pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
+    )
+    ref_coords = (
+        _pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
+    )
+    mob_res = mob_pose.residue(mob_index)
+    targ_res = targ_pose.residue(targ_index)
+    for atom in ("N", "CA", "C"):
+        init_coords.append(mob_res.xyz(atom))
+        ref_coords.append(targ_res.xyz(atom))
+    superposition_pose(mob_pose, init_coords, ref_coords)
+    return mob_pose
+
+
 def super_by_residues(mob_pose, targ_pose, mob_index, targ_index, *args):
     """
     superimposes mob_pose onto targ_pose: aligns by atom name from indexes given
@@ -44,22 +60,6 @@ def super_by_residues(mob_pose, targ_pose, mob_index, targ_index, *args):
     for index in index_range:
         init_coords.append(mob_res.xyz(args[index]))
         ref_coords.append(targ_res.xyz(args[index]))
-    superposition_pose(mob_pose, init_coords, ref_coords)
-    return mob_pose
-
-
-def super_resi_by_bb(mob_pose, targ_pose, mob_index, targ_index):
-    init_coords = (
-        _pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
-    )
-    ref_coords = (
-        _pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
-    )
-    mob_res = mob_pose.residue(mob_index)
-    targ_res = targ_pose.residue(targ_index)
-    for atom in ("C", "N", "CA"):
-        init_coords.append(mob_res.xyz(atom))
-        ref_coords.append(targ_res.xyz(atom))
     superposition_pose(mob_pose, init_coords, ref_coords)
     return mob_pose
 
