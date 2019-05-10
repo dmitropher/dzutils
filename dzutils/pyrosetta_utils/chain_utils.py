@@ -140,8 +140,10 @@ def chain_break(pose, index):
     """
     num_res = len(pose.residues)
 
-    outpose = add_cut(pose, index)
-
+    try:
+        outpose = add_cut(pose, index)
+    except RuntimeError as e:
+        outpose = pose
     _pyrosetta.rosetta.core.pose.add_upper_terminus_type_to_pose_residue(
         outpose, index
     )
