@@ -314,3 +314,20 @@ def rechain_resname(pose, resname):
         target_poses.append(res_pose)
         other_pose.delete_residue_range_slow(res, res)
     return link_poses(other_pose, *target_poses, rechain=True)
+
+
+def serial_deletions(pose, target, terminus=None):
+    """
+    Returns list of all serial dels to the chain_begin/end, up to target residue
+    """
+    if terminus == "chain_begin":
+        return [
+            trim_pose_to_term(pose.clone(), i, terminus)
+            for i in range(target, 1, -1)
+        ]
+    if terminus == "chain_end":
+        chain_end = len(pose.residues)
+        return [
+            trim_pose_to_term(pose.clone(), i, terminus)
+            for i in range(target, chain_end, 1)
+        ]

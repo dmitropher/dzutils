@@ -1,4 +1,6 @@
 import pyrosetta.rosetta as _pyr
+from pyrosetta import pose_from_file as _from_file
+from dzutils.pdb_file_utils import pdb_files_in_dir as _pfd
 
 
 def residues_by_name(pose, *names, include_res=False):
@@ -57,3 +59,13 @@ def get_index_atom(pose, index, atom):
         return pose.residue(index).atom(atom)
     except:
         return None
+
+
+def poses_from_pdb_dir(dir, filename_condition=(lambda x: True)):
+    """
+    returns a generator that creates poses from the given directory
+
+    A condition can be given which will be run on the filename. If it returns
+    True the file will be loaded to pose.
+    """
+    return (_from_file(file) for file in _pfd(dir) if filename_condition(file))
