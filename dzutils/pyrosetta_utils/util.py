@@ -69,3 +69,13 @@ def poses_from_pdb_dir(dir, filename_condition=(lambda x: True)):
     True the file will be loaded to pose.
     """
     return (_from_file(file) for file in _pfd(dir) if filename_condition(file))
+
+
+def residues2pose(pose):
+    """
+    Returns a generator that turns each residue into a pose
+    """
+    for res in pose.residues:
+        new_pose = _pyr.core.pose.Pose()
+        new_pose.append_residue_by_bond(res, True)
+        yield new_pose
