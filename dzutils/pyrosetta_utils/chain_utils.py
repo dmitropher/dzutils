@@ -91,7 +91,7 @@ def link_poses(*poses, rechain=False):
     if rechain:
         for i, pose in enumerate(poses[1:], 1):
             target.append_pose_by_jump(pose, i)
-        target.conformation().chains_from_termini()
+        # target.conformation().chains_from_termini()
     else:
         for pose in poses[1:]:
             _pyrosetta.rosetta.core.pose.append_pose_to_pose(
@@ -331,3 +331,36 @@ def serial_deletions(pose, target, terminus=None):
             trim_pose_to_term(pose.clone(), i, terminus)
             for i in range(target, chain_end, 1)
         ]
+
+
+def run_direct_segment_lookup(
+    pose,
+    label="naive_loop",
+    database="/home/fordas/databases/vall.json",
+    length=5,
+    rmsd_tol=0.75,
+    cluster_tol=1.75,
+    from_chain=1,
+    to_chain=2,
+):
+    """
+    Wrapper for direct segment lookup mover
+
+    Exists to make code more concise and set some defaults that
+    made sense at the time
+    """
+    segment_lookup_mover = (
+        _pyrosetta.rosetta.protocols.indexed_structure_store.movers.DirectSegmentLookupMover()
+    )
+    config = segment_lookup_mover.lookup_config()
+    config.max_insertion_length = length
+    config.rmsd_tolerance = rmsd_tol
+    config.segment_cluster_tolerance = cluster_tol
+    segment_lookup_mover.from_chain(from_chain)
+    segment_lookup_mover.to_chain(to_chain)
+    if label:
+        segment_lookup_mover.label_insertion(label)
+    segment_lookup_mover.lookup_config(config)
+    segment_lookup_mover.structure_store_path(database)
+    segment_lookup_mover.apply(pose)
+    return segment_lookup_mover

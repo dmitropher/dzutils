@@ -1,4 +1,5 @@
 import os as _os
+import glob as _g
 
 
 def write_list_to_file(in_list, name, ext="", delim=" "):
@@ -15,13 +16,8 @@ def files_in_dir_by_ext(directory, ext):
 
     ignores files beginning with "."
     """
-    output = [
-        root + "/" + f
-        for root, dirs, fs in _os.walk(directory, followlinks=True)
-        for f in fs
-        if f.split(".")[-1] == ext and f.split(".")[0]
-    ]
-    return output
+
+    return _g.glob(f"{directory}/*.{ext}")
 
 
 def pdb_files_in_dir(directory):
@@ -30,11 +26,7 @@ def pdb_files_in_dir(directory):
     treats pdb.gz as a pdb
     """
     pdb_files = files_in_dir_by_ext(directory, "pdb")
-    pdb_gz_files = [
-        f
-        for f in files_in_dir_by_ext(directory, "gz")
-        if len(f.split(".")) > 1 and f.split(".")[-2] == "pdb"
-    ]
+    pdb_gz_files = files_in_dir_by_ext(directory, "pdb.gz")
     pdb_files.extend(pdb_gz_files)
     output = pdb_files
     return output
