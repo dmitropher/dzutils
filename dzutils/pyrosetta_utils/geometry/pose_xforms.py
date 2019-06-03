@@ -397,3 +397,29 @@ def generate_pose_rt_between_res(
         return pose_rt_array
     else:
         return pose_rt_array
+
+
+def generate_e2e_xform_from_chain(
+    pose,
+    chain=1,
+    reverse=False,
+    atoms_1=("CA", "N", "CA", "C"),
+    atoms_2=("CA", "N", "CA", "C"),
+):
+    """
+    Returns xform from one end to another of the given chain in pose
+
+    chain default is 1
+    reverse=True gives the end to start instead of start to end
+    atoms_1 indicates the atoms for the start of the xform, not start of chain
+    """
+    chains = pose.split_by_chain()
+    query = chains[chain]
+    if reverse:
+        return generate_pose_rt_between_res(
+            query, query.chain_end(1), query.chain_begin(1), atoms_1, atoms_2
+        )
+    else:
+        return generate_pose_rt_between_res(
+            query, query.chain_begin(1), query.chain_end(1), atoms_1, atoms_2
+        )
