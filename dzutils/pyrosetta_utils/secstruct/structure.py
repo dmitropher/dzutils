@@ -3,6 +3,7 @@
 # continued chemical properties of these elements.
 import pyrosetta.rosetta as _pyr
 from itertools import groupby as _gb
+from dzutils.pyrosetta_utils import or_compose_residue_selectors as or_combine
 
 
 class SecondaryStructureContainerFactory:
@@ -63,6 +64,23 @@ class SecondaryStructureResidueContainer(object):
             SecondaryStructureResidueContainer(self.start_pos, index),
             SecondaryStructureResidueContainer(index + 1, self.end_pos),
         )
+
+    def generate_residue_selector(self):
+        """
+        Returns a residue selector for the given container
+        """
+        return _pyr.core.select.residue_selector.ResidueIndexSelector(
+            f"{self.start_pos}-{self.end_pos}"
+        )
+
+    def subpose_structure(self):
+        """
+        Returns an instance of this where pose only has residues in this container
+        """
+        subpose = _pyr.protocols.grafting.return_region(
+            self.pose, self.start_pos, self.end_pos
+        )
+        return type(self)(subpose, 1, len(subpose.residues), self.dssp_type)
 
 
 class HelixResidueContainer(SecondaryStructureResidueContainer):
@@ -147,3 +165,43 @@ def parse_structure_from_dssp(pose, *dssp_types):
         for run in ([n for n, p in iterator],)
         if (not dssp_types) or res_type_string in dssp_types
     ]
+
+
+def remove_ss_from_pose(pose, *dssp_types, in_place=True):
+    """
+    Must provide dssp_types
+    """
+    if not dssp_types:
+        raise ValueError("At least one dssp type must be provided")
+    struct_list = parse_structure_from_dssp(pose, *dssp_types)
+    selectors = [ss.generate_residue_selector() for ss in struct_list]
+    selector = or_combine(*selectors)
+    delete_mover = _pyr.protocols.grafting.simple_movers.DeleteRegionMover()
+    delete_mover.set_residue_selector(selector)
+    if in_place:
+        delete_mover.apply(pose)
+        return pose
+    else:
+        out = pose.clone()
+        delete_mover.apply(out)
+        return out
+
+
+def split_ss_to_subpose_containers(pose, *dssp_types):
+    """
+    Returns a list of containers referencing subposes with the given residues
+
+    Blank dssp_types assumes all
+    """
+    struct_list = parse_structure_from_dssp(pose, *dssp_types)
+    return [ss.subpose_structure() for ss in struct_list]
+
+
+def split_ss_to_subposes(pose, *dssp_types):
+    """
+    Returns a list of subposes split by secondary structure
+
+    Blank dssp_types assumes all
+    """
+    struct_list = parse_structure_from_dssp(pose, *dssp_types)
+    return [ss.subpose_structure().pose for ss in struct_list]
