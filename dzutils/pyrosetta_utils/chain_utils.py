@@ -194,7 +194,7 @@ def run_direct_segment_lookup(
     label="naive_loop",
     database="/home/fordas/databases/vall.json",
     length=5,
-    rmsd_tol=0.75,
+    rmsd_tol=0.5,
     cluster_tol=1.75,
     from_chain=1,
     to_chain=2,

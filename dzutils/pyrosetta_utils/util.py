@@ -79,3 +79,43 @@ def residues2pose(pose):
         new_pose = _pyr.core.pose.Pose()
         new_pose.append_residue_by_bond(res, True)
         yield new_pose
+
+
+def and_compose_residue_selectors(*args):
+    """
+    Takes a list of residue selectors of arbitrary size and composes them with AND, returns the AND selector
+    """
+    andSelector = None
+    for a in args:
+        andSelector = _pyr.core.select.residue_selector.AND_combine(
+            andSelector, a
+        )
+
+    return andSelector
+
+
+def or_compose_residue_selectors(*args):
+    """
+    Takes a list of residue selectors of arbitrary size and composes them with OR, returns the OR selector
+    """
+    orSelector = None
+    for a in args:
+        orSelector = _pyr.core.select.residue_selector.OR_combine(
+            orSelector, a
+        )
+
+    return orSelector
+
+
+def exclude_by_label_residue_selector(label):
+    """
+    Takes a label string and generates a residue selector which selects all the other residues
+    """
+
+    labelSelector = (
+        _pyr.core.select.residue_selector.ResiduePDBInfoHasLabelSelector()
+    )
+    labelSelector.set_label(label)
+    notSelector = _pyr.core.select.residue_selector.NotResidueSelector()
+    notSelector.set_residue_selector(labelSelector)
+    return notSelector
