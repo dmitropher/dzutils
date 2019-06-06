@@ -27,15 +27,32 @@ def pose_from_chain(pose, chain):
     return pose.split_by_chain()[chain]
 
 
-def pose_excluding_chain(pose, chain):
+def pose_excluding_chain(pose, *chain_nums):
     """
     Returns a pose without the listed chain
     """
-    chains = [p for i, p in enumerate(pose.split_by_chain(), 1) if i != chain]
+    chains = [
+        p
+        for i, p in enumerate(pose.split_by_chain(), 1)
+        if i not in chain_nums
+    ]
     new_pose = chains[0]
     for i, chain in enumerate(chains[1:], 1):
         new_pose.append_pose_by_jump(chain, i)
     return new_pose
+
+
+def replace_chain_by_number(pose, replacement, chain_num):
+    """
+    Return pose, but with replacement at chain chain_num
+    """
+    return link_poses(
+        *[
+            (c if i != chain_num else replacement)
+            for i, c in enumerate(pose.split_by_chain(), 1)
+        ],
+        rechain=True
+    )
 
 
 def posnum_in_chain(pose, resnum):
@@ -156,7 +173,7 @@ def insert_pose_as_chain_terminus(
     target_pose = _pyrosetta.rosetta.core.pose.Pose()
     target_pose.detached_copy(pose)
     chain_num = target_pose.chain(target)
-    chain = target_pose.chain(target)
+    chain = target_pose.split_by_chain()[chain_num]
     trimmed = trim_pose_to_term(
         chain, posnum_in_chain(target_pose, target), terminus=terminus
     )
@@ -165,12 +182,13 @@ def insert_pose_as_chain_terminus(
         if terminus == "chain_begin"
         else link_poses(trimmed, in_pose)
     )
-
-    new_chains = (
-        chain if i != chain_num else inserted
-        for i, chain in enumerate(chains, 1)
-    )
-    return link_poses(*new_chains, rechain=True)
+    # chains = target_pose.split_by_chain()
+    # new_chains = (
+    #     chain if i != chain_num else inserted
+    #     for i, chain in enumerate(chains, 1)
+    # )
+    # return link_poses(*new_chains, rechain=True)
+    return replace_chain_by_number(target_pose, inserted, chain_num)
 
 
 def insert_pose(target_pose, in_pose, start=0, end=0, smooth=False):
@@ -203,7 +221,7 @@ def insert_pose(target_pose, in_pose, start=0, end=0, smooth=False):
     # insert_pose_as_chain_terminus
     if not end or not start:
         return insert_pose_as_chain_terminus(
-            chain,
+            pose,
             in_pose,
             start if start else end,
             terminus="chain_end" if start else "chain_begin",

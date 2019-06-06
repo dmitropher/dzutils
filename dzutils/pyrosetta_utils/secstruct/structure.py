@@ -47,6 +47,7 @@ class SecondaryStructureResidueContainer(object):
         """
         return self.start_pos, self.end_pos
 
+    # TODO maybe get rid of this shift
     def frame_shift(self, n):
         """
         Add n to both the start and end of the SecondaryStructure (accepts neg)
@@ -65,12 +66,26 @@ class SecondaryStructureResidueContainer(object):
             SecondaryStructureResidueContainer(index + 1, self.end_pos),
         )
 
-    def generate_residue_selector(self):
+    def generate_residue_selector(self, upstream=0, downstream=0):
         """
         Returns a residue selector for the given container
+
+        upstream and downstream specify a range to allow before and after the
+        container. Negative values reduce the selection of the selector.
         """
+        start = self.start_pos - upstream
+        end = self.end_pos + downstream
+        assert bool(
+            start < end
+        ), "Cannot generate residue selector where end precedes start"
+        if start < 1 or end > len(self.pose.residues):
+            raise (
+                ValueError,
+                f"start: {start} or end: {end} are not found in the pose",
+            )
+
         return _pyr.core.select.residue_selector.ResidueIndexSelector(
-            f"{self.start_pos}-{self.end_pos}"
+            f"{self.start_pos - upstream}-{self.end_pos + downstream}"
         )
 
     def subpose_structure(self):
