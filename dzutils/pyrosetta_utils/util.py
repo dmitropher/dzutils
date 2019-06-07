@@ -131,3 +131,26 @@ def residues_with_element(pose, *elements):
         for i in range(1, len(res.atoms()) + 1)
         if res.atom_type(i).element() in elements
     ]
+
+
+def atom_indices_with_element(residue, element):
+    """
+    Returns a list of atom_indices for the given element
+    """
+    return [
+        i
+        for i in range(1, len(residue.atoms()) + 1)
+        if residue.atom_type(i).element() == element
+    ]
+
+
+def bonded_atoms(residue, index, name=False):
+    """
+    Returns a list of atom indices where those atoms have a bond to index
+
+    If name is true, returns a list of atom names
+    """
+    return [
+        (res.atom_name(j) if name else j)
+        for j in residue.bonded_neighbor(index)
+    ]
