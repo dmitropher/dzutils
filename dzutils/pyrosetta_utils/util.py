@@ -119,3 +119,15 @@ def exclude_by_label_residue_selector(label):
     notSelector = _pyr.core.select.residue_selector.NotResidueSelector()
     notSelector.set_residue_selector(labelSelector)
     return notSelector
+
+
+def residues_with_element(pose, *elements):
+    """
+    Returns a list of resnums where element is in some atom of the residue
+    """
+    return [
+        res.atom_type(i).element()
+        for res in pose.residues
+        for i in range(1, len(res.atoms()) + 1)
+        if res.atom_type(i).element() in elements
+    ]

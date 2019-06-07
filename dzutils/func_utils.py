@@ -1,5 +1,7 @@
 import functools as _functools
 import numpy as _np
+import os as _os
+import sys as _sys
 
 
 def compose(*functions):
@@ -80,6 +82,16 @@ def index_to_pair(index, sample, radius):
         + ((relative[0] + relative[1]) % num_residues == 0) * num_residues,
     ]
     return absolute
+
+
+class HiddenPrints:
+    def __enter__(self):
+        self._original_stdout = _sys.stdout
+        _sys.stdout = open(_os.devnull, "w")
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        _sys.stdout.close()
+        _sys.stdout = self._original_stdout
 
 
 ######### The following stuff is yanked from Guido Van Rossum's blog ##########
