@@ -423,3 +423,24 @@ def generate_e2e_xform_from_chain(
         return generate_pose_rt_between_res(
             query, query.chain_begin(1), query.chain_end(1), atoms_1, atoms_2
         )
+
+def get_e2e_xform(pose):
+    """
+    get the pose xform from first to the last residue of the given pose
+
+    only supports bb atoms
+    """
+    return generate_pose_between_res(pose, 1, len(pose.residues))
+
+
+def get_func_to_end(pose, residue, atoms, begin=True):
+    """
+    get the xform from residue to the first (or last) residue of the pose
+
+    Must provide atoms for the functional group to build xforms from
+    atoms must be iterable (preferably tuple or list)
+    begin=False gets the xform to the end instead of the beginning
+    """
+    return generate_pose_between_res(
+        pose, residue, (1 if being else len(pose.residues)), atoms
+    )

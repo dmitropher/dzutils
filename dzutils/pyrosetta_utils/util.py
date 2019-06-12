@@ -145,10 +145,10 @@ def residues_with_element(pose, *elements):
     Returns a list of resnums where element is in some atom of the residue
     """
     return [
-        res.atom_type(i).element()
-        for res in pose.residues
-        for i in range(1, len(res.atoms()) + 1)
-        if res.atom_type(i).element() in elements
+        i
+        for i,res in enumerate(pose.residues,1)
+        for j in range(1, len(res.atoms()) + 1)
+        if res.atom_type(j).element() in elements
     ]
 
 
