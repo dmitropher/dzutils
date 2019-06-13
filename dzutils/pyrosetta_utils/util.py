@@ -146,7 +146,7 @@ def residues_with_element(pose, *elements):
     """
     return [
         i
-        for i,res in enumerate(pose.residues,1)
+        for i, res in enumerate(pose.residues, 1)
         for j in range(1, len(res.atoms()) + 1)
         if res.atom_type(j).element() in elements
     ]
