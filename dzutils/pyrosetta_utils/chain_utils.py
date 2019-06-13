@@ -332,11 +332,11 @@ def rechain_resname(pose, resname):
     residues = residues_by_name(pose, resname)
     target_poses = []
     other_pose = pose.clone()
-    for res in residues:
+    for i, res in enumerate(residues):
         res_pose = _pyrosetta.rosetta.core.pose.Pose()
         res_pose.append_residue_by_bond(pose.residue(res))
         target_poses.append(res_pose)
-        other_pose.delete_residue_range_slow(res, res)
+        other_pose.delete_residue_range_slow(res - i, res - i)
     return link_poses(other_pose, *target_poses, rechain=True)
 
 

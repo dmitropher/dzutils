@@ -6,18 +6,13 @@ from xbin import XformBinner as _xb
 from dzutils.pyrosetta_utils.geometry.pose_xforms import (
     get_e2e_xform,
     get_func_to_end,
+    generate_pose_rt_between_res,
 )
 from dzutils.pyrosetta_utils import (
     residues_with_element,
     hbond_to_residue,
     atom_indices_with_element,
     bonded_atoms,
-)
-from .util import hbond_to_residue
-
-# from ..pyrosetta_utils.util import residues_by_name as _residues_by_name
-from dzutils.pyrosetta_utils.geometry.pose_xforms import (
-    generate_pose_rt_between_res,
 )
 
 
@@ -55,13 +50,13 @@ def p_bound_atoms(pose):
     ]
 
 
-def get_loop_xform_dicts(pose, num_contacts, *args, **kwargs):
+def get_loop_xform_dicts(pose, num_contacts, *args, loop_chain=1, **kwargs):
     """
     returns a dict with xforms from end to end and from phosphate to end
 
     Dict also contains an xbin key
     """
-    e2e = get_e2e_xform(pose)
+    e2e = get_e2e_xform(pose.split_by_chain()[loop_chain])
     xb = _xb(*args, **kwargs)
     xform_dicts = [
         {
