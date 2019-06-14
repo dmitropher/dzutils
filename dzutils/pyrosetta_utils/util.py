@@ -144,12 +144,16 @@ def residues_with_element(pose, *elements):
     """
     Returns a list of resnums where element is in some atom of the residue
     """
-    return [
-        i
-        for i, res in enumerate(pose.residues, 1)
-        for j in range(1, len(res.atoms()) + 1)
-        if res.atom_type(j).element() in elements
-    ]
+    return list(
+        set(
+            [
+                i
+                for i, res in enumerate(pose.residues, 1)
+                for j in range(1, len(res.atoms()) + 1)
+                if res.atom_type(j).element() in elements
+            ]
+        )
+    )
 
 
 def atom_indices_with_element(residue, element):
@@ -170,6 +174,6 @@ def bonded_atoms(residue, index, name=False):
     If name is true, returns a list of atom names
     """
     return [
-        (res.atom_name(j) if name else j)
+        (residue.atom_name(j) if name else j)
         for j in residue.bonded_neighbor(index)
     ]
