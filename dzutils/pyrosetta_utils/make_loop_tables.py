@@ -57,17 +57,17 @@ for sample in poses:
     if xform_dicts:
         dicts.extend(xform_dicts)
 
-pdf = pd.DataFrame(dicts)
-pdf["index"] = pdf.index
+loop_table = pd.DataFrame(dicts)
+loop_table["index"] = loop_table.index
 data_name = "exp_no_spin_1ang_15k_ploops_v3"
 data_store_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/ploops_expanded_set_1"
-pdf.name = data_name
-table_out_path = f"{data_store_path}/tables/{pdf.name}.json"
+loop_table.name = data_name
+table_out_path = f"{data_store_path}/tables/{loop_table.name}.json"
 assert bool(
     not (isfile(table_out_path))
 ), "Table with this name already exists"
-pdf.to_json(table_out_path)
-loop_table = pd.read_json(f"{data_store_path}/tables/{data_name}.json")
+loop_table.to_json(table_out_path)
+# loop_table = pd.read_json(f"{data_store_path}/tables/{data_name}.json")
 e2e_keys = np.array(loop_table["key_int"], dtype=np.int64)
 e2e_vals = np.array(loop_table["index"], dtype=np.int64)
 key_type = np.dtype("i8")
