@@ -99,9 +99,7 @@ def get_loop_xform_dicts(pose, num_contacts, *args, loop_chain=1, **kwargs):
 
 def loop_res_pairs(pose):
     """
-    Returns tuples of all res-res combos
-
-    Can restrict search to a residue index selector string
+    Returns tuples of all res-res combos within loops
     """
     resnums = [
         i
@@ -116,7 +114,7 @@ def loop_res_pairs(pose):
         )
         if is_sel
     ]
-    return [(pose.clone(), i, j) for i, j in permutations(resnums, 2)]
+    return [(pose.clone(), i, j) for i, j in permutations(resnums, 2) if i > j]
 
 
 def pair_to_rt_dict(pose, resnum_1, resnum_2, **kwargs):
@@ -134,6 +132,18 @@ def pair_to_rt_dict(pose, resnum_1, resnum_2, **kwargs):
         "start_res": resnum_1,
         "end_res": resnum_2,
     }
+
+
+def loops_to_rt_dict(pose):
+    """
+    Wrapper to hopefully conserve memory
+    """
+    return [
+        pair_to_rt_dict(pose, i, j)
+        for loop in parse_structure_from_dssp(pose, "L")
+        for i, j in permutations(loop.resnum_list(), 2)
+        if i < j
+    ]
 
 
 def phospho_residue_inverse_rotamer_rts(residue):
