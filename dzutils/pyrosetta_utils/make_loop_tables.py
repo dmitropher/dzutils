@@ -15,6 +15,19 @@ from dzutils.pyrosetta_utils.chain_utils import rechain_resname
 
 # from dzutils.pyrosetta_utils.geometry.pose_xforms import generate_pose_rt_between_res,get_func_to_end
 
+
+def maybe_load(pdb):
+    """
+    Dumb hack so rosettta can tolerate pdbs it can't load
+    """
+    try:
+        pose = pyrosetta.pose_from_file(pdb)
+        return pose
+    except Exception as e:
+        print(e)
+        return pyrosetta.pose_from_sequence("AAA")
+
+
 ploop_flags_file = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/initial_testing/misc_files/p_ligand.flags"
 flags = read_flag_file(ploop_flags_file)
 flags_str = " ".join(flags.replace("\n", " ").split())
@@ -23,8 +36,8 @@ pyrosetta.init(flags_str)
 
 pdb_dir = "/home/dzorine/phos_binding/ploop_set_1/"
 pdb_paths = pdb_files_in_dir(pdb_dir)
-subset = pdb_paths
-poses = (pyrosetta.pose_from_file(p) for p in subset)
+# subset = pdb_paths
+poses = (maybe_load(p) for p in pdb_paths)
 dicts = list()
 for sample in poses:
     names = list(
@@ -46,10 +59,10 @@ for sample in poses:
 
 pdf = pd.DataFrame(dicts)
 pdf["index"] = pdf.index
-data_name = "exp_no_spin_1ang_15k_ploops_v2"
+data_name = "exp_no_spin_1ang_15k_ploops_v3"
 data_store_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/ploops_expanded_set_1"
 pdf.name = data_name
-table_out_path = f"{data_store_path}/tables/{pdf.name()}.json"
+table_out_path = f"{data_store_path}/tables/{pdf.name}.json"
 assert bool(
     not (isfile(table_out_path))
 ), "Table with this name already exists"

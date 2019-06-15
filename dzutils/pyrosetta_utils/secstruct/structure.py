@@ -47,6 +47,12 @@ class SecondaryStructureResidueContainer(object):
         """
         return self.start_pos, self.end_pos
 
+    def resnum_list(self):
+        """
+        returns a list of residues that are in the container
+        """
+        return [*range(self.start_pos, self.end_pos + 1)]
+
     # TODO maybe get rid of this shift
     def frame_shift(self, n):
         """
@@ -76,8 +82,8 @@ class SecondaryStructureResidueContainer(object):
         start = self.start_pos - upstream
         end = self.end_pos + downstream
         assert bool(
-            start < end
-        ), "Cannot generate residue selector where end precedes start"
+            start <= end
+        ), f"Cannot generate residue selector where end: {end} precedes start: {start}"
         if start < 1 or end > len(self.pose.residues):
             raise (
                 ValueError,
