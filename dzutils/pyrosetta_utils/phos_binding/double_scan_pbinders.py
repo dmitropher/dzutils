@@ -64,7 +64,7 @@ pdf["allowed_res"] = pdf["rt"].apply(lambda x: [*range(1, len(pose.residues))])
 
 # The tables are loaded here from hardcoded paths
 key_type, value_type = np.dtype("i8"), np.dtype("i8")
-data_name = "exp_no_spin_1ang_15k_ploops"
+data_name = "exp_no_spin_1ang_15k_ploops_v3"
 data_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/ploops_expanded_set_1"
 table_dir_path = f"{data_path}/tables"
 dict_dir_path = f"{data_path}/dicts"
