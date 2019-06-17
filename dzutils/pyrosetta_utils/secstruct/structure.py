@@ -176,10 +176,14 @@ def parse_structure_from_dssp(pose, *dssp_types):
     generic SecondaryStructureResidueContainer
     """
 
-    dssp_str = _pyr.core.scoring.dssp.Dssp(pose).get_dssp_secstruct()
+    dssp_strings = [
+        _pyr.core.scoring.dssp.Dssp(chain).get_dssp_secstruct()
+        for chain in pose.split_by_chain()
+    ]
     creator = get_container_creator()
     return [
         creator.get_container(pose, run[0], run[-1], str(res_type_string))
+        for dssp_str in dssp_strings
         for res_type_string, iterator in _gb(
             enumerate(dssp_str, 1), lambda x: x[1]
         )
