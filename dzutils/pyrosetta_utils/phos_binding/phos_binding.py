@@ -60,6 +60,21 @@ def get_loop_xform_dicts(pose, num_contacts, *args, loop_chain=1, **kwargs):
     """
     e2e = get_e2e_xform(pose.split_by_chain()[loop_chain])
     xb = _xb(*args, **kwargs)
+    p_atoms = [
+        (
+            p_atom_i,
+            [
+                atom
+                for atom in bonded_atoms(
+                    pose.residue(resnum), p_atom_i, name=False
+                )
+                for hbond in hbond_to_residue(pose, resnum, vec=False)
+                if hbond.acc_atm() == atom
+            ],
+            resnum,
+        )
+        for p_atom_i, resnum in p_atoms_in_pose(pose)
+    ]
     xform_dicts = [
         {
             "file": pose.pdb_info().name(),
@@ -70,29 +85,9 @@ def get_loop_xform_dicts(pose, num_contacts, *args, loop_chain=1, **kwargs):
                 pose, resnum, 1, (p_atom, p_atom, bonded_1, bonded_2)
             ),
         }
-        for p_atom, others, resnum in [
-            (
-                atom_i,
-                list(
-                    set(
-                        [
-                            atom
-                            for atom in bonded_atoms(
-                                pose.residue(resnum), atom_i, name=False
-                            )
-                            for hbond in hbond_to_residue(
-                                pose, resnum, vec=False
-                            )
-                            if hbond.acc_atm() == atom
-                        ]
-                    )
-                ),
-                resnum,
-            )
-            for atom_i, resnum in p_atoms_in_pose(pose)
-        ]
+        for p_atom, others, resnum in p_atoms
         if len(others) >= num_contacts
-        for bonded_1, bonded_2 in permutations(others, 2)
+        for bonded_1, bonded_2 in permutations(list(set(others)), 2)
     ]
     return xform_dicts
 

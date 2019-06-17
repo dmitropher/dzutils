@@ -39,16 +39,13 @@ pdb_paths = pdb_files_in_dir(pdb_dir)
 # subset = pdb_paths
 poses = (maybe_load(p) for p in pdb_paths)
 dicts = list()
-for sample in poses:
+for pose in poses:
     names = list(
         set(
-            [
-                sample.residue(i).name3()
-                for i in residues_with_element(sample, "P")
-            ]
+            [pose.residue(i).name3() for i in residues_with_element(pose, "P")]
         )
     )
-    newp = sample.clone()
+    newp = pose.clone()
     if len(newp.residues) < 4:
         continue
     for name in names:
@@ -59,6 +56,7 @@ for sample in poses:
 
 loop_table = pd.DataFrame(dicts)
 loop_table["index"] = loop_table.index
+print(len(loop_table.index))
 data_name = "exp_no_spin_1ang_15k_ploops_v3"
 data_store_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/ploops_expanded_set_1"
 loop_table.name = data_name
