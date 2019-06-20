@@ -8,6 +8,11 @@ from dzutils.pyrosetta_utils.geometry.pose_xforms import (
     # get_func_to_end,
     generate_pose_rt_between_res,
 )
+
+from dzutils.pyrosetta_utils.geometry.superposition_utilities import (
+    super_by_paired_atoms,
+)
+
 from dzutils.pyrosetta_utils import (
     residues_with_element,
     hbond_to_residue,
@@ -163,3 +168,57 @@ def phospho_residue_inverse_rotamer_rts(residue):
         generate_pose_rt_between_res(pose.clone(), 1, 1, base)
         for base in possible_rt_bases
     ]
+
+
+def num_bb_contacts(pose, resnum, atom_i):
+    contacts = sum(
+        (
+            hbond.don_hatm_is_protein_backbone()
+            and hbond.acc_atm() in bonded_atoms(pose.residue(resnum), atom_i)
+        )
+        for hbond in hbond_to_residue(pose, resnum)
+    )
+    print(contacts)
+    return contacts
+
+
+def replace_p_res_with_phosphate(pose, min_contacts=0):
+    """
+    returns a copy of the pose with every phosphoresidue converted to phosphate
+
+    PO4 must be a residue in your rosetta instance
+    """
+
+    p_res_list = p_atoms_in_pose(pose)
+    phosphates = list()
+    for atom_i, resnum in p_res_list:
+        bb_contacts = num_bb_contacts(pose, resnum, atom_i)
+        if bb_contacts < min_contacts:
+            print(
+                f"res {resnum} at atom {atom_i} has only {bb_contacts} contacts, less than {min_contacts}"
+            )
+            continue
+        p = _pyrosetta.rosetta.core.pose.Pose()
+        restype = _pyrosetta.rosetta.core.pose.get_restype_for_pose(p, "PO4")
+        res = _pyrosetta.rosetta.core.conformation.Residue(restype, True)
+        p.append_residue_by_jump(res, 1)
+        p_atom = atom_indices_with_element(res, "P")[0]
+
+        atom_tuples = list(
+            zip(
+                [p_atom, *bonded_atoms(res, p_atom)[:2]],
+                [atom_i, *bonded_atoms(pose.residue(resnum), atom_i)[:2]],
+            )
+        )
+        # print(atom_tuples)
+        phosphates.append(
+            super_by_paired_atoms(p, pose, 1, resnum, *atom_tuples)
+        )
+    res_to_remove = list(set([resnum for atom_i, resnum in p_res_list]))
+    # print(res_to_remove)
+    newp = pose.clone()
+    for i, resnum in enumerate(res_to_remove):
+        newp.delete_residue_slow(resnum - i)
+    for phos in phosphates:
+        _pyrosetta.rosetta.core.pose.append_pose_to_pose(newp, phos, True)
+    return newp

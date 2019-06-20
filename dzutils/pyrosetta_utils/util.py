@@ -127,17 +127,71 @@ def hbond_to_residue(pose, resnum, vec=False):
 
     vec=True returns a rosetta vector instead (marginally faster)
     """
+    hbond_set = _pyr.core.scoring.hbonds.HBondSet(pose, False)
+    options = hbond_set.hbond_options()
+    # print(
+    #     "default options",
+    #     options.exclude_DNA_DNA(),
+    #     options.exclude_intra_res_protein(),
+    #     options.exclude_intra_res_RNA(),
+    #     options.put_intra_into_total(),
+    #     options.exclude_self_hbonds(),
+    #     options.use_hb_env_dep(),
+    #     options.use_hb_env_dep_DNA(),
+    #     options.smooth_hb_env_dep(),
+    #     options.bb_donor_acceptor_check(),
+    #     options.decompose_bb_hb_into_pair_energies(),
+    #     options.use_sp2_chi_penalty(),
+    #     options.sp2_BAH180_rise(),
+    #     options.sp2_outer_width(),
+    #     options.measure_sp3acc_BAH_from_hvy(),
+    #     options.fade_energy(),
+    #     options.exclude_ether_oxygens(),
+    #     options.Mbhbond(),
+    #     options.mphbond(),
+    #     options.hbond_energy_shift(),
+    #     options.length_dependent_srbb(),
+    #     options.length_dependent_srbb_lowscale(),
+    #     options.length_dependent_srbb_highscale(),
+    #     options.length_dependent_srbb_minlength(),
+    #     options.length_dependent_srbb_maxlength(),
+    #     options.water_hybrid_sf(),
+    # )
+    hbond_set = _pyr.core.scoring.hbonds.HBondSet()
+    options = hbond_set.hbond_options()
+    options.exclude_DNA_DNA(True)
+    options.exclude_intra_res_protein(True)
+    options.exclude_intra_res_RNA(False)
+    options.put_intra_into_total(False)
+    options.exclude_self_hbonds(True)
+    options.use_hb_env_dep(True)
+    options.use_hb_env_dep_DNA(True)
+    options.smooth_hb_env_dep(True)
+    options.bb_donor_acceptor_check(True)
+    options.decompose_bb_hb_into_pair_energies(False)
+    options.use_sp2_chi_penalty(True)
+    options.sp2_BAH180_rise(0.75)
+    options.sp2_outer_width(0.357)
+    options.measure_sp3acc_BAH_from_hvy(True)
+    options.fade_energy(True)
+    options.exclude_ether_oxygens(False)
+    options.Mbhbond(False)
+    options.mphbond(False)
+    options.hbond_energy_shift(0.0)
+    options.length_dependent_srbb(False)
+    options.length_dependent_srbb_lowscale(0.5)
+    options.length_dependent_srbb_highscale(2.0)
+    options.length_dependent_srbb_minlength(4)
+    options.length_dependent_srbb_maxlength(17)
+    options.water_hybrid_sf(False)
+    pose.update_residue_neighbors()
+    hbond_set.setup_for_residue_pair_energies(pose, False, False)
+    # options.length_dependent_srbb(False)
+
     if vec:
-        return _pyr.core.scoring.hbonds.HBondSet(
-            pose, bb_only=False
-        ).residue_hbonds(resnum)
+        return hbond_set.residue_hbonds(resnum)
     else:
-        return [
-            b
-            for b in _pyr.core.scoring.hbonds.HBondSet(
-                pose, bb_only=False
-            ).residue_hbonds(resnum)
-        ]
+        return [b for b in hbond_set.residue_hbonds(resnum)]
 
 
 def residues_with_element(pose, *elements):
@@ -171,7 +225,7 @@ def bonded_atoms(residue, index, name=False):
     """
     Returns a list of atom indices where those atoms have a bond to index
 
-    If name is true, returns a list of atom names
+    If name is True, returns a list of atom names
     """
     return [
         (residue.atom_name(j) if name else j)
