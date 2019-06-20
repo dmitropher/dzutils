@@ -64,6 +64,31 @@ def super_by_residues(mob_pose, targ_pose, mob_index, targ_index, *args):
     return mob_pose
 
 
+def super_by_paired_atoms(
+    mob_pose, targ_pose, mob_index, targ_index, *atom_pairs
+):
+    """
+    super mob onto targ, uses tuples in atom_pairs (mob_atom1,targ_atom1),etc
+
+    May provide any number of atom pairs as long as both are in each residue
+    """
+    init_coords = (
+        _pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
+    )
+    ref_coords = (
+        _pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
+    )
+    mob_res = mob_pose.residue(mob_index)
+    targ_res = targ_pose.residue(targ_index)
+    num_atoms = len(atom_pairs)
+    assert bool(num_atoms > 0), "no atoms pairs given"
+    for mob_atom, targ_atom in atom_pairs:
+        init_coords.append(mob_res.xyz(mob_atom))
+        ref_coords.append(targ_res.xyz(targ_atom))
+    superposition_pose(mob_pose, init_coords, ref_coords)
+    return mob_pose
+
+
 def align_to_tetrahedral_rotation(mob_pose, mob_resnum, rotation=0, *args):
     """
     Align the pose to a rotation of the atoms specified
