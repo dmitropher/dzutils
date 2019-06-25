@@ -31,6 +31,63 @@ def load_table_and_dict(table_path, dict_path, key_type, value_type):
     return table, gp_dict
 
 
+def scan_for_ploop_graft(pose,table_path, dict_path,inv_rot_table_path, inv_rot_dict_path, loop_key_type=np.dtype("i8"),loop_value_type=np.dtype("i8"),inv_rot_key_type=np.dtype("i8"),inv_rot_value_type=np.dtype("i8"),):
+
+    #Convert the pose loops into end to end xforms
+    rt_dicts = loops_to_rt_dict(pose)
+    if not rt_dicts:
+        print("empty rt dicts")
+        return
+    pdf = pd.DataFrame(rt_dicts)
+    binner = xb()
+    pdf["key"] = pdf["rt"].apply(lambda x: xb().get_bin_index(x))
+
+    #FIXME
+    # allowed res is all res in this case
+    pdf["allowed_res"] = pdf["rt"].apply(
+        lambda x: [*range(1, len(pose.residues))]
+    )
+
+    loop_table, loop_dict = load_table_and_dict(
+        table_path, dict_path, loop_key_type, loop_value_type
+    )
+
+    mask = loop_dict.contains(np.array(pdf["key"]))
+    masked_df = pdf[mask]
+    if len(masked_df.index) == 0:
+        print("no primary hits found")
+        return
+
+    #Hits found, append appropriate fields from data table and generate
+    #Inverse rotamer bin key
+    masked_df.loc[:, "e2e_inds"] = loop_dict[np.array(masked_df["key"])]
+    results = masked_df.loc[~masked_df.index.duplicated(keep="first")]
+
+    for col in loop_table:
+        results[f"loop_{col}"] = results["e2e_inds"].map(
+            lambda index: loop_table[loop_table["index"] == index][col].item()
+        )
+
+    results = (
+        results.allowed_res.apply(pd.Series)
+        .merge(results, right_index=True, left_index=True)
+        .melt(id_vars=[*results], value_name="p_res_target")
+        .drop(["allowed_res", "variable"], axis=1)
+    )
+
+    results["inv_rot_key"] = results.apply(
+        lambda row: binner.get_bin_index(
+            row["loop_func_to_bb_start"]
+            @ generate_pose_rt_between_res(
+                pose.clone(), row["start_res"], row["p_res_target"]
+            )
+        ),
+        axis=1,
+    )
+    inv_rot_table, inv_rot_dict = load_table_and_dict(
+        inv_rot_table_path, inv_rot_dict_path, key_type, value_type
+    )
+
 def main():
     ploop_flags_file = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/initial_testing/misc_files/p_ligand.flags"
     flags = read_flag_file(ploop_flags_file)
@@ -112,6 +169,7 @@ def main():
     rot_masked_df = results[rot_mask]
     if len(rot_masked_df.index) == 0:
         print("no secondary hits found")
+        return
 
     else:
         print("rot_masked", rot_masked_df)
