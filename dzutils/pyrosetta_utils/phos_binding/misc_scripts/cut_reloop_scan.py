@@ -17,6 +17,35 @@ from dzutils.pyrosetta_utils.phos_binding.misc_scripts.double_scan_pbinders impo
     scan_for_ploop_graft,
     scan_for_inv_rot,
 )
+from dzutils.pyrosetta_utils.geometry.superposition_utilities import (
+    super_by_residues,
+)
+
+
+def super_and_insert_pose(start, end, pose, insertion, insertion_start):
+    moved_insertion = super_by_residues(
+        insertion, pose, insertion_start, start
+    )
+    newp = pose.clone()
+    newp.delete_residue_range_slow(start, end)
+    print(start)
+    print(moved_insertion)
+    print(newp)
+    return pyrosetta.rosetta.protocols.grafting.insert_pose_into_pose(
+        newp, moved_insertion, start - 1
+    )
+
+
+def graft_and_dump_pdb(
+    pose, insertion, start, end, insertion_start, dump_path
+):
+    """
+    """
+    if not super_and_insert_pose(
+        start, end, pose, insertion, insertion_start
+    ).dump_pdb(dump_path):
+        raise RuntimeError(f"Unable to dump pdb at specfied path: {dump_path}")
+    return dump_path
 
 
 flagsFile = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/initial_testing/misc_files/cluster_altered.flags"
@@ -54,11 +83,22 @@ for i, pose in enumerate(
 
     primary_write_path = f"{primary_hit_out_dir}/primary_double_ploop_hits_{pdb_name}_loop_{i}.json"
     primary_hit_pdb_path = (
-        f"{primary_hit_pdb_out_dir}/source_files/{pdb_name}_loop_{i}.pdb"
+        f"{primary_hit_pdb_out_dir}/source_files/{pdb_name}_reloop_{i}.pdb"
     )
 
     # Add a grafted file entry to each row, dump the pdb to that
     # CODECODECODE
+    primary_results_table["loop_insertion_path"] = primary_results_table.apply(
+        lambda row: graft_and_dump_pdb(
+            pyrosetta.pose_from_file(row["scaffold_path"]),
+            pyrosetta.pose_from_file(row["loop_file"]),
+        ),
+        row["start_res"],
+        row["end_res"],
+        1,
+        row["scaffold_path"].split("/")[-1].split(".pdb")[0],
+        axis=1,
+    )
 
     results.to_json(primary_write_path)
     pose.dump_pdb(primary_hit_pdb_path)
@@ -76,7 +116,7 @@ for i, pose in enumerate(
     if not secondary_results_table:
         print("no secondary hits found for this pose")
         continue
-    secondary_write_path = f"{secondary_hit_out_dir}/secondary_double_ploop_hits_{pdb_name}_loop_{i}.json"
+    secondary_write_path = f"{secondary_hit_out_dir}/secondary_double_ploop_hits_{pdb_name}_reloop_{i}.json"
 
     # Add a grafted file entry with phos rotamer to each row, dump the pdb
     # CODECODECODE
