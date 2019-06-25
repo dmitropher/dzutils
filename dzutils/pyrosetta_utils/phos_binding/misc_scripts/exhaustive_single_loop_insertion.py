@@ -113,10 +113,10 @@ def exhaustive_single_loop_insertion(pose, deletion_amount,*args,**kwargs):
         for cut_begin, cut_end in it.product(*dels):
             print("attempting cut begin/end: ", cut_begin, cut_end)
             print("chains begin/end: ", chain_begin_num, chain_end_num)
-            if cut_end > len(
-                pose.split_by_chain()[chain_begin_num].residues
-            ) or cut_begin > len(
+            if cut_end >= len(
                 pose.split_by_chain()[chain_end_num].residues
+            ) or cut_begin >= len(
+                pose.split_by_chain()[chain_begin_num].residues
             ):
                 print("not computing begin/end: ", cut_begin, cut_end)
                 continue
