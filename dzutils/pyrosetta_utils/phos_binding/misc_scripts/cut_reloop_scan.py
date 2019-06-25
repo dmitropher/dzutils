@@ -31,4 +31,5 @@ ss_only_name = f"{out_dir}/source_files/{pose_name}{suffix}"
 # mind the hardcode
 ss_only_chains.dump_pdb(ss_only_name)
 ss_only_chains = pyrosetta.pose_from_file(ss_only_name)
-exhaustive_single_loop_insertion(ss_only_chains, out_dir, 5)
+for looped_pose in exhaustive_single_loop_insertion(ss_only_chains, out_dir, 5):
+    
