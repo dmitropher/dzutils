@@ -99,7 +99,7 @@ class SecondaryStructureResidueContainer(object):
         Returns an instance of this where pose only has residues in this container
         """
         subpose = _pyr.protocols.grafting.return_region(
-            self.pose, self.start_pos, self.end_pos
+            self.pose.clone(), self.start_pos, self.end_pos
         )
         return type(self)(subpose, 1, len(subpose.residues), self.dssp_type)
 
@@ -176,16 +176,23 @@ def parse_structure_from_dssp(pose, *dssp_types):
     generic SecondaryStructureResidueContainer
     """
 
-    dssp_strings = [
-        _pyr.core.scoring.dssp.Dssp(chain).get_dssp_secstruct()
+    dssp_dicts = [
+        {
+            "pose": chain,
+            "dssp_string": _pyr.core.scoring.dssp.Dssp(
+                chain
+            ).get_dssp_secstruct(),
+        }
         for chain in pose.split_by_chain()
     ]
     creator = get_container_creator()
     return [
-        creator.get_container(pose, run[0], run[-1], str(res_type_string))
-        for dssp_str in dssp_strings
+        creator.get_container(
+            dssp_dict["pose"], run[0], run[-1], str(res_type_string)
+        )
+        for dssp_dict in dssp_dicts
         for res_type_string, iterator in _gb(
-            enumerate(dssp_str, 1), lambda x: x[1]
+            enumerate(dssp_dict["dssp_string"], 1), lambda x: x[1]
         )
         for run in ([n for n, p in iterator],)
         if (not dssp_types) or res_type_string in dssp_types
