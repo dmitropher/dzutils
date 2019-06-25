@@ -56,7 +56,7 @@ def graft_and_dump_pdb(
 
 
 def main():
-    flagsFile = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/initial_testing/misc_files/cluster_altered.flags"
+    flagsFile = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/initial_testing/misc_files/p_ligand.flags"
     flags = read_flag_file(flagsFile)
     flags_str = " ".join(flags.replace("\n", " ").split())
     pyrosetta.init(flags_str)
