@@ -45,7 +45,7 @@ def scan_for_ploop_graft(
         print("empty rt dicts")
         return
     pdf = pd.DataFrame(rt_dicts)
-    binner = xb()
+    # binner = xb()
     pdf["key"] = pdf["rt"].apply(lambda x: xb().get_bin_index(x))
 
     # FIXME
@@ -96,6 +96,7 @@ def scan_for_inv_rot(
     )
 
     # generate the keys for inverse rotamer
+    binner = xb()
     results["inv_rot_key"] = results.apply(
         lambda row: binner.get_bin_index(
             row["loop_func_to_bb_start"]
