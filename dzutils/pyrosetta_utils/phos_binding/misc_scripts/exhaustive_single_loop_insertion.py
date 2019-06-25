@@ -28,7 +28,7 @@ def closed_loop_generator(pose,*args,**kwargs):
     segment_lookup_mover = run_direct_segment_lookup(
         working_pose, length=8, cluster_tol=0.5, rmsd_tol=0.5
     )
-    if working_pose:
+    while working_pose:
         yield working_pose
         working_pose = segment_lookup_mover.get_additional_output()
 
