@@ -94,6 +94,7 @@ def main():
         pdb_name = pose.pdb_info().name().split("/")[-1].split(".pdb")[0]
         # results.name = "double_ploop_hits"
 
+        # prepare all the output directories
         primary_hit_out_dir = f"{out_dir}/{primary_hit_dirname}"
         if not os.path.isdir(primary_hit_out_dir):
             os.makedirs(primary_hit_out_dir)
@@ -124,13 +125,12 @@ def main():
             axis=1,
         )
         primary_results_table.apply(
-            lambda row: pyrosetta.pose_from_file(
-                row["scaffold_path"]
-            ).dump_pdb(
-                f'{grafted_loops_dir}/{row["scaffold_path"].split("/")[-1].split(".pdb")[0]}_reloop_{i}_ploop_index_{row["loop_index"]}.pdb'
+            lambda row: pyrosetta.pose_from_file(row["loop_file"]).dump_pdb(
+                f'{source_file_dir}/{row["loop_file"].split("/")[-1]}'
             ),
             axis=1,
         )
+
         primary_results_table.to_json(primary_write_path)
         primary_hit_pdb_path = f"{source_file_dir}/{pdb_name}_reloop_{i}.pdb"
         pose.dump_pdb(primary_hit_pdb_path)
@@ -152,7 +152,29 @@ def main():
         if not secondary_results_table:
             print("no secondary hits found for this pose")
             continue
-        secondary_write_path = f"{secondary_hit_out_dir}/secondary_double_ploop_hits_{pdb_name}_reloop_{i}.json"
+
+        # prepare all the output directories
+        secondary_hit_out_dir = f"{out_dir}/{secondary_hit_dirname}"
+        if not os.path.isdir(secondary_hit_out_dir):
+            os.makedirs(secondary_hit_out_dir)
+        secondary_write_path = f"""{secondary_hit_out_dir
+                                   }/secondary_double_ploop_hits_{
+                                   pdb_name
+                                   }_loop_{
+                                   i
+                                   }.json"""
+
+        assert not os.path.exists(
+            secondary_write_path
+        ), f"secondary hit data would overwrite file at: {secondary_write_path}"
+        # source_file_dir = f"{secondary_hit_out_dir}/source_files/"
+        # if not os.path.isdir(source_file_dir):
+        #     os.makedirs(source_file_dir)
+        secondary_grafted_loops_dir = (
+            f"{secondary_hit_out_dir}/grafted_loops_with_p_res/"
+        )
+        if not os.path.isdir(secondary_grafted_loops_dir):
+            os.makedirs(secondary_grafted_loops_dir)
 
         # Add a grafted file entry with phos rotamer to each row, dump the pdb
 
@@ -170,7 +192,20 @@ def main():
                 row["start_res"],
                 row["end_res"],
                 1,
-                f'{row["scaffold_path"].split("/")[-1].split(".pdb")[0]}_reloop_{i}_ploop_index_{row["loop_index"]}_pres_{row["p_res_target"]}.pdb',
+                f"""{secondary_grafted_loops_dir
+                    }/{
+                    row["scaffold_path"].split("/")[-1].split(".pdb")[0]
+                    }_reloop_{i}_ploop_index_{
+                    row["loop_index"]
+                    }_pres_{
+                    row["p_res_target"]
+                    }.pdb""",
+            ),
+            axis=1,
+        )
+        secondary_results_table.apply(
+            lambda row: pyrosetta.pose_from_file(row["inv_rot_file"]).dump_pdb(
+                f'{source_file_dir}/{row["inv_rot_file"].split("/")[-1]}'
             ),
             axis=1,
         )
