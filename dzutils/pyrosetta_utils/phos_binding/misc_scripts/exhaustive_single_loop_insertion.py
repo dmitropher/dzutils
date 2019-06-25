@@ -72,15 +72,16 @@ def generate_name(pose, chain_begin, chain_end, cut_begin, cut_end):
             }-{cut_end
             }"""
 
-#for a different commit
-# def reorder_chains_for_loop_closure(pose,):
-#     replace_chain_by_number(
-#         replace_chain_by_number(
-#             pose.clone(), chain_begin, chain_begin_num
-#         ),
-#         chain_end,
-#         chain_end_num,
-#     )
+
+def reorder_chains_for_loop_closure(pose,):
+    replace_chain_by_number(
+        replace_chain_by_number(
+            pose.clone(), chain_begin, chain_begin_num
+        ),
+        chain_end,
+        chain_end_num,
+    )
+    return
 
 def check_for_client():
     try:
@@ -320,7 +321,7 @@ def main():
                 chain_end = trim_chain(
                     pose, chain_end_num, cut_end, "chain_begin"
                 )
-                replace_chain_by_number(
+                pose = replace_chain_by_number(
                     replace_chain_by_number(
                         pose.clone(), chain_begin, chain_begin_num
                     ),
