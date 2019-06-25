@@ -99,7 +99,7 @@ def reorder_chains_for_closure(pose,chain_begin_num,chain_end_num):
         rechain=True,
     ))
 
-def exhaustive_single_loop_insertion(pose, outdir, deletion_amount,*args,**kwargs):
+def exhaustive_single_loop_insertion(pose, deletion_amount,*args,**kwargs):
     """
     Takes arguments for loop closure method
     """
@@ -108,6 +108,7 @@ def exhaustive_single_loop_insertion(pose, outdir, deletion_amount,*args,**kwarg
     chain_pair_iter = it.permutations(range(1, num_chains + 1), 2)
     dels = (range(0, deletion_amount),) * 2
 
+    pose_generators = list()
     for chain_begin_num, chain_end_num in chain_pair_iter:
         for cut_begin, cut_end in it.product(*dels):
             print("attempting cut begin/end: ", cut_begin, cut_end)
@@ -123,7 +124,7 @@ def exhaustive_single_loop_insertion(pose, outdir, deletion_amount,*args,**kwarg
                 pose, chain_begin_num, cut_begin, "chain_end"
             )
             chain_end = trim_chain(pose, chain_end_num, cut_end, "chain_begin")
-            replace_chain_by_number(
+            pose = replace_chain_by_number(
                 replace_chain_by_number(
                     pose.clone(), chain_begin, chain_begin_num
                 ),
@@ -136,7 +137,8 @@ def exhaustive_single_loop_insertion(pose, outdir, deletion_amount,*args,**kwarg
 
             reordered_pose = reorder_chains_for_closure(pose,chain_begin_num,chain_end_num)
 
-            return closed_loop_generator(reordered_pose,*args,**kwargs)
+            for out_pose in closed_loop_generator(reordered_pose,*args,**kwargs):
+                yield out_pose
 
 
 def check_for_client():
