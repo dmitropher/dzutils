@@ -105,6 +105,7 @@ def link_poses(*poses, rechain=False):
     assert bool(len(poses)), "number of input poses must be greater than 0"
     target = _pyrosetta.rosetta.core.pose.Pose()
     target.detached_copy(poses[0])
+    # target = poses[0].clone()
     if rechain:
         for i, pose in enumerate(poses[1:], 1):
             target.append_pose_by_jump(pose, i)

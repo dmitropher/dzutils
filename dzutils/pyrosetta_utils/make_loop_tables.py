@@ -25,7 +25,7 @@ def maybe_load(pdb):
         return pose
     except Exception as e:
         print(e)
-        return pyrosetta.pose_from_sequence("AAA")
+        return pyrosetta.pose_from_sequence("A")
 
 
 ploop_flags_file = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/initial_testing/misc_files/p_ligand.flags"
@@ -34,7 +34,7 @@ flags_str = " ".join(flags.replace("\n", " ").split())
 pyrosetta.init(flags_str)
 
 
-pdb_dir = "/home/dzorine/phos_binding/ploop_set_1/"
+pdb_dir = "/home/dzorine/phos_binding/ploop_pdbs/ploop_set_3/spinnable_3_contact"
 pdb_paths = pdb_files_in_dir(pdb_dir)
 # subset = pdb_paths
 poses = (maybe_load(p) for p in pdb_paths)
@@ -46,10 +46,10 @@ for pose in poses:
         )
     )
     newp = pose.clone()
-    if len(newp.residues) < 4:
+    if len(newp.residues) < 3:
         continue
-    for name in names:
-        newp = rechain_resname(newp, name)
+    # for name in names:
+    #     newp = rechain_resname(newp, name)
     xform_dicts = get_loop_xform_dicts(newp, 3)
     if xform_dicts:
         dicts.extend(xform_dicts)
@@ -57,10 +57,9 @@ for pose in poses:
 loop_table = pd.DataFrame(dicts)
 loop_table["index"] = loop_table.index
 print(len(loop_table.index))
-data_name = "exp_no_spin_1ang_15k_ploops_v3"
+data_name = "exp_no_spin_1ang_3_contact_ploop_set_3_v1"
 data_store_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/ploops_expanded_set_1"
-loop_table.name = data_name
-table_out_path = f"{data_store_path}/tables/{loop_table.name}.json"
+table_out_path = f"{data_store_path}/tables/{data_name}.json"
 assert bool(
     not (isfile(table_out_path))
 ), "Table with this name already exists"
