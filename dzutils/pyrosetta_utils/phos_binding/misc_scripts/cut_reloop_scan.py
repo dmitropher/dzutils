@@ -96,10 +96,9 @@ for i, pose in enumerate(
         row["start_res"],
         row["end_res"],
         1,
-        row["scaffold_path"].split("/")[-1].split(".pdb")[0],
+        f'{row["scaffold_path"].split("/")[-1].split(".pdb")[0]}_reloop_{i}_ploop_index_{row["loop_index"]}.pdb',
         axis=1,
     )
-
     results.to_json(primary_write_path)
     pose.dump_pdb(primary_hit_pdb_path)
 
