@@ -81,7 +81,8 @@ def graft_and_dump_pdb(
 
 
 def main():
-    flagsFile = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/initial_testing/misc_files/p_ligand_quiet.flags"
+    # flagsFile = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/initial_testing/misc_files/p_ligand_quiet.flags"
+    flagsFile = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/initial_testing/misc_files/p_ligand_loud.flags"
     flags = read_flag_file(flagsFile)
     flags_str = " ".join(flags.replace("\n", " ").split())
     print(flags_str)
@@ -102,9 +103,14 @@ def main():
     # mind the hardcode
     ss_only_chains.dump_pdb(ss_only_name)
     ss_only_chains = pyrosetta.pose_from_file(ss_only_name)
+    print(f"generating poses for {pose_name}")
+    # poses = [
+    # pose for pose in exhaustive_single_loop_insertion(ss_only_chains, 5)
+    # ]
     for i, pose in enumerate(
         exhaustive_single_loop_insertion(ss_only_chains, 5), 1
     ):
+        # for i, pose in enumerate(poses, 1):
         print("beginning scan of closed loop pose")
         # key_type, value_type = np.dtype("i8"), np.dtype("i8")
         data_name = "exp_no_spin_1ang_3_contact_ploop_set_3_v1"

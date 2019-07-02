@@ -31,8 +31,18 @@ def closed_loop_generator(pose, *args, **kwargs):
         working_pose, length=8, cluster_tol=0.5, rmsd_tol=0.5
     )
     print("mover complete")
+
+    # Remember to check for NULL !!!
+    status = segment_lookup_mover.get_last_move_status()
+    if status != pyrosetta.rosetta.protocols.moves.mstype_from_name(
+        "MS_SUCCESS"
+    ):
+        print("mover status: ", status)
+        return
     yield working_pose
     for working_pose in iter(segment_lookup_mover.get_additional_output, None):
+        print("popped pose from mover")
+        print(working_pose)
         yield working_pose
 
 
@@ -140,6 +150,7 @@ def exhaustive_single_loop_insertion(pose, deletion_amount, *args, **kwargs):
                 reordered_pose, *args, **kwargs
             ):
                 print("pose reloop successful")
+                print(out_pose)
                 yield out_pose
 
 
