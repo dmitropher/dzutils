@@ -80,8 +80,12 @@ def link_poses(*poses, rechain=False):
     target.detached_copy(poses[0])
     # target = poses[0].clone()
     # n_jump = target.num_jump()
+    assert bool(len(target.residues) > 0), "Cannot link poses with 0 residues!"
     if rechain:
         for i, pose in enumerate(poses[1:]):
+            assert bool(
+                len(pose.residues) > 0
+            ), "Cannot link poses with 0 residues!"
             target.append_pose_by_jump(pose, 1)
         # target.conformation().chains_from_termini()
     else:

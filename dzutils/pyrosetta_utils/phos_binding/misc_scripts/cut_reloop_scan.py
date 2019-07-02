@@ -47,7 +47,7 @@ def super_and_insert_pose(start, end, pose, insertion, insertion_start):
     #     len(moved_insertion.residues),
     # )
     pyrosetta.rosetta.protocols.grafting.delete_region(
-        newp, start + 1, end - 1
+        newp, start + 1, end  # - 1
     )
     newp.dump_pdb("/home/dzorine/temp/trimmed_before_insert.pdb")
     print(start, end)
