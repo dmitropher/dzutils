@@ -26,12 +26,14 @@ from dzutils.pyrosetta_utils.chain_utils import replace_chain_by_number
 def closed_loop_generator(pose, *args, **kwargs):
 
     working_pose = pose.clone()
+    print("running direct segment lookup")
     segment_lookup_mover = run_direct_segment_lookup(
         working_pose, length=8, cluster_tol=0.5, rmsd_tol=0.5
     )
-    while working_pose:
+    print("mover complete")
+    yield working_pose
+    for working_pose in iter(segment_lookup_mover.get_additional_output, None):
         yield working_pose
-        working_pose = segment_lookup_mover.get_additional_output()
 
 
 def default_loop_close(pose, name, outdir):
@@ -82,21 +84,18 @@ def reorder_chains_for_closure(pose, chain_begin_num, chain_end_num):
 
     With only two chains it can bug out, hence the weird ternary operator
     """
+    print(f"reordering chains: begin {chain_begin_num} end {chain_end_num}")
     return (
         link_poses(
-            *(
-                pose.split_by_chain()[chain_begin_num],
-                pose.split_by_chain()[chain_end_num],
-            ),
+            pose.split_by_chain()[chain_begin_num],
+            pose.split_by_chain()[chain_end_num],
             pose_excluding_chain(pose, chain_begin_num, chain_end_num),
             rechain=True,
         )
         if pose.num_chains() > 2
         else link_poses(
-            *(
-                pose.split_by_chain()[chain_begin_num],
-                pose.split_by_chain()[chain_end_num],
-            ),
+            pose.split_by_chain()[chain_begin_num],
+            pose.split_by_chain()[chain_end_num],
             rechain=True,
         )
     )
@@ -132,14 +131,15 @@ def exhaustive_single_loop_insertion(pose, deletion_amount, *args, **kwargs):
                 chain_end,
                 chain_end_num,
             )
-
+            print("chains trimmed")
             reordered_pose = reorder_chains_for_closure(
                 pose, chain_begin_num, chain_end_num
             )
-
+            print("chains reordered")
             for out_pose in closed_loop_generator(
                 reordered_pose, *args, **kwargs
             ):
+                print("pose reloop successful")
                 yield out_pose
 
 

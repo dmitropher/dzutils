@@ -6,16 +6,18 @@
 import sys
 
 import pandas as pd
-import getpy as gp
+
+from getpy import Dict as GDict
+
 import numpy as np
 
-import pyrosetta
 
 from xbin import XformBinner as xb
 
 
 from dzutils.sutils import read_flag_file
 from dzutils.pyrosetta_utils.phos_binding import loops_to_rt_dict
+
 from dzutils.pyrosetta_utils.geometry.pose_xforms import (
     generate_pose_rt_between_res,
 )
@@ -25,7 +27,7 @@ def load_table_and_dict(table_path, dict_path, key_type, value_type):
     """
     return a tuple of table,dict
     """
-    gp_dict = gp.Dict(key_type, value_type)
+    gp_dict = GDict(key_type, value_type)
     gp_dict.load(dict_path)
     table = pd.read_json(table_path)
     return table, gp_dict
@@ -38,7 +40,7 @@ def scan_for_ploop_graft(
     loop_key_type=np.dtype("i8"),
     loop_value_type=np.dtype("i8"),
 ):
-
+    pose = pose.clone()
     # Convert the pose loops into end to end xforms
     rt_dicts = loops_to_rt_dict(pose)
     if not rt_dicts:
@@ -137,13 +139,15 @@ def scan_for_inv_rot(
 
 
 def main():
+    from pyrosetta import init, pose_from_file
+
     ploop_flags_file = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/initial_testing/misc_files/p_ligand.flags"
     flags = read_flag_file(ploop_flags_file)
     flags_str = " ".join(flags.replace("\n", " ").split())
-    pyrosetta.init(flags_str)
+    init(flags_str)
 
     pdb_path = sys.argv[1]
-    pose = pyrosetta.pose_from_file(pdb_path)
+    pose = pose_from_file(pdb_path)
 
     rt_dicts = loops_to_rt_dict(pose)
     if not rt_dicts:
