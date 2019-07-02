@@ -27,21 +27,6 @@ def pose_from_chain(pose, chain):
     return pose.split_by_chain()[chain]
 
 
-def pose_excluding_chain(pose, *chain_nums):
-    """
-    Returns a pose without the listed chain
-    """
-    chains = [
-        p
-        for i, p in enumerate(pose.split_by_chain(), 1)
-        if i not in chain_nums
-    ]
-    new_pose = chains[0]
-    for i, chain in enumerate(chains[1:], 1):
-        new_pose.append_pose_by_jump(chain, i)
-    return new_pose
-
-
 def replace_chain_by_number(pose, replacement, chain_num):
     """
     Return pose, but with replacement at chain chain_num
@@ -55,13 +40,14 @@ def replace_chain_by_number(pose, replacement, chain_num):
     )
 
 
-def posnum_in_chain(pose, resnum):
-    """
-    returns resnum - pose.chain_begin(resnum) + 1
-
-    sometimes i wanna keep track of stuff when i split by chain ok
-    """
-    return resnum - pose.chain_begin(resnum) + 1
+# this is broken, chain_begin returns the first res of the chain_num
+# def posnum_in_chain(pose, resnum):
+#     """
+#     returns resnum - pose.chain_begin(resnum) + 1
+#
+#     sometimes i wanna keep track of stuff when i split by chain ok
+#     """
+#     return resnum - pose.chain_begin(resnum) + 1
 
 
 def add_cut(pose, index, new_pose=False):
@@ -106,8 +92,9 @@ def link_poses(*poses, rechain=False):
     target = _pyrosetta.rosetta.core.pose.Pose()
     target.detached_copy(poses[0])
     # target = poses[0].clone()
+    n_jump = target.num_jump()
     if rechain:
-        for i, pose in enumerate(poses[1:], 1):
+        for i, pose in enumerate(poses[1:], n_jump + 1):
             target.append_pose_by_jump(pose, i)
         # target.conformation().chains_from_termini()
     else:
@@ -116,6 +103,22 @@ def link_poses(*poses, rechain=False):
                 target, pose, False
             )
     return target
+
+
+def pose_excluding_chain(pose, *chain_nums):
+    """
+    Returns a pose without the listed chain
+    """
+    chains = [
+        p
+        for i, p in enumerate(pose.split_by_chain(), 1)
+        if i not in chain_nums
+    ]
+    # new_pose = chains[0]
+    # for i, chain in enumerate(chains[1:], 1):
+    #     new_pose.append_pose_by_jump(chain, i)
+    new_pose = link_poses(*chains, rechain=True)
+    return new_pose
 
 
 def trim_pose_to_term(pose, target, terminus=None):
