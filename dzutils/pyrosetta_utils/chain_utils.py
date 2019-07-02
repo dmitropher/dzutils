@@ -79,10 +79,10 @@ def link_poses(*poses, rechain=False):
     target = _pyrosetta.rosetta.core.pose.Pose()
     target.detached_copy(poses[0])
     # target = poses[0].clone()
-    n_jump = target.num_jump()
+    # n_jump = target.num_jump()
     if rechain:
-        for i, pose in enumerate(poses[1:], n_jump + 1):
-            target.append_pose_by_jump(pose, i)
+        for i, pose in enumerate(poses[1:]):
+            target.append_pose_by_jump(pose, 1)
         # target.conformation().chains_from_termini()
     else:
         for pose in poses[1:]:
@@ -117,6 +117,7 @@ def pose_excluding_chain(pose, *chain_nums):
     # new_pose = chains[0]
     # for i, chain in enumerate(chains[1:], 1):
     #     new_pose.append_pose_by_jump(chain, i)
+    print("linking chains")
     new_pose = link_poses(*chains, rechain=True)
     return new_pose
 
