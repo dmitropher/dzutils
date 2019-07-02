@@ -83,9 +83,17 @@ def link_poses(*poses, rechain=False):
     assert bool(len(poses)), "number of input poses must be greater than 0"
     target = _pyrosetta.rosetta.core.pose.Pose()
     target.detached_copy(poses[0])
+<<<<<<< HEAD
     if rechain:
         for i, pose in enumerate(poses[1:], 1):
             target.append_pose_by_jump(pose, i)
+=======
+    # target = poses[0].clone()
+    # n_jump = target.num_jump()
+    if rechain:
+        for i, pose in enumerate(poses[1:]):
+            target.append_pose_by_jump(pose, 1)
+>>>>>>> need to fix posnum in chain
         # target.conformation().chains_from_termini()
     else:
         for pose in poses[1:]:
@@ -95,6 +103,39 @@ def link_poses(*poses, rechain=False):
     return target
 
 
+<<<<<<< HEAD
+=======
+def replace_chain_by_number(pose, replacement, chain_num):
+    """
+    Return pose, but with replacement at chain chain_num
+    """
+    return link_poses(
+        *[
+            (c if i != chain_num else replacement)
+            for i, c in enumerate(pose.split_by_chain(), 1)
+        ],
+        rechain=True
+    )
+
+
+def pose_excluding_chain(pose, *chain_nums):
+    """
+    Returns a pose without the listed chain
+    """
+    chains = [
+        p
+        for i, p in enumerate(pose.split_by_chain(), 1)
+        if i not in chain_nums
+    ]
+    # new_pose = chains[0]
+    # for i, chain in enumerate(chains[1:], 1):
+    #     new_pose.append_pose_by_jump(chain, i)
+    print("linking chains")
+    new_pose = link_poses(*chains, rechain=True)
+    return new_pose
+
+
+>>>>>>> need to fix posnum in chain
 def trim_pose_to_term(pose, target, terminus=None):
     """
     Removes residues from start to chosen terminus, returns the pose
