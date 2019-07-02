@@ -6,6 +6,8 @@ import itertools as it
 import os
 
 # import gc
+
+# import gc
 import sys
 
 import dask.bag as db
@@ -121,6 +123,7 @@ def exhaustive_single_loop_insertion(pose, deletion_amount, *args, **kwargs):
     dels = (range(0, deletion_amount),) * 2
     for chain_begin_num, chain_end_num in chain_pair_iter:
         for cut_begin, cut_end in it.product(*dels):
+            # gc.collect()
             print("attempting cut begin/end: ", cut_begin, cut_end)
             print("chains begin/end: ", chain_begin_num, chain_end_num)
             if cut_end >= len(
@@ -131,10 +134,12 @@ def exhaustive_single_loop_insertion(pose, deletion_amount, *args, **kwargs):
                 print("not computing begin/end: ", cut_begin, cut_end)
                 continue
             chain_begin = trim_chain(
-                pose, chain_begin_num, cut_begin, "chain_end"
+                pose.clone(), chain_begin_num, cut_begin, "chain_end"
             )
-            chain_end = trim_chain(pose, chain_end_num, cut_end, "chain_begin")
-            pose = replace_chain_by_number(
+            chain_end = trim_chain(
+                pose.clone(), chain_end_num, cut_end, "chain_begin"
+            )
+            trimmed_pose = replace_chain_by_number(
                 replace_chain_by_number(
                     pose.clone(), chain_begin, chain_begin_num
                 ),
@@ -143,7 +148,7 @@ def exhaustive_single_loop_insertion(pose, deletion_amount, *args, **kwargs):
             )
             print("chains trimmed")
             reordered_pose = reorder_chains_for_closure(
-                pose, chain_begin_num, chain_end_num
+                trimmed_pose, chain_begin_num, chain_end_num
             )
             print("chains reordered")
             for out_pose in closed_loop_generator(
