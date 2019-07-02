@@ -27,19 +27,6 @@ def pose_from_chain(pose, chain):
     return pose.split_by_chain()[chain]
 
 
-def replace_chain_by_number(pose, replacement, chain_num):
-    """
-    Return pose, but with replacement at chain chain_num
-    """
-    return link_poses(
-        *[
-            (c if i != chain_num else replacement)
-            for i, c in enumerate(pose.split_by_chain(), 1)
-        ],
-        rechain=True
-    )
-
-
 # this is broken, chain_begin returns the first res of the chain_num
 # def posnum_in_chain(pose, resnum):
 #     """
@@ -103,6 +90,19 @@ def link_poses(*poses, rechain=False):
                 target, pose, False
             )
     return target
+
+
+def replace_chain_by_number(pose, replacement, chain_num):
+    """
+    Return pose, but with replacement at chain chain_num
+    """
+    return link_poses(
+        *[
+            (c if i != chain_num else replacement)
+            for i, c in enumerate(pose.split_by_chain(), 1)
+        ],
+        rechain=True
+    )
 
 
 def pose_excluding_chain(pose, *chain_nums):
