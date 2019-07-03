@@ -147,6 +147,7 @@ def loops_to_rt_dict(pose):
         for loop in parse_structure_from_dssp(pose, "L")
         for i, j in permutations(loop.resnum_list(), 2)
         if i < j
+        if i != 1
     ]
 
 
