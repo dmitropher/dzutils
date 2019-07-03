@@ -40,6 +40,17 @@ def scan_for_ploop_graft(
     loop_key_type=np.dtype("i8"),
     loop_value_type=np.dtype("i8"),
 ):
+    """
+    Scans the pose for a phos loop grafted
+
+    Weird gotchas:
+    This function will ignore any grafts where the start residue is residue 1 for
+    grafting reasons later
+
+    It will only find grafts where the posenum of the start is smaller than end
+
+    It will only search within each loop, not between loops
+    """
     pose = pose.clone()
     # Convert the pose loops into end to end xforms
     rt_dicts = loops_to_rt_dict(pose)

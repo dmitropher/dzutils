@@ -46,22 +46,53 @@ def super_and_insert_pose(start, end, pose, insertion, insertion_start):
     #     pyrosetta.rosetta.core.chemical.UPPER_TERMINUS_VARIANT,
     #     len(moved_insertion.residues),
     # )
-    pyrosetta.rosetta.protocols.grafting.delete_region(
-        newp, start + 1, end  # - 1
-    )
-    newp.dump_pdb("/home/dzorine/temp/trimmed_before_insert.pdb")
+    pyrosetta.rosetta.protocols.grafting.delete_region(newp, start, end)  # - 1
+    # newp.dump_pdb("/home/dzorine/temp/trimmed_before_insert.pdb")
     print(start, end)
     # print(moved_insertion)
     # print(newp)
+    pyrosetta.rosetta.core.pose.remove_variant_type_from_pose_residue(
+        newp, pyrosetta.rosetta.core.chemical.UPPER_TERMINUS_VARIANT, start - 1
+    )
     out_pose = pyrosetta.rosetta.protocols.grafting.insert_pose_into_pose(
-        newp, moved_insertion, start, start + 1, False
+        newp, moved_insertion, start - 1, start, False
     )
     # out_pose = insert_pose(newp, moved_insertion, start - 1)
     return out_pose
 
 
 def replace_res_from_pose(pose, replacement, index, replacement_index):
-    pose.replace_residue(index, replacement.residue(replacement_index), False)
+    replacement_copy = replacement.clone()
+    # super_by_residues(replacement_copy,pose,replacement_index,index)
+    pyrosetta.rosetta.core.pose.remove_variant_type_from_pose_residue(
+        replacement_copy,
+        pyrosetta.rosetta.core.chemical.UPPER_TERMINUS_VARIANT,
+        replacement_index,
+    )
+    pyrosetta.rosetta.core.pose.remove_variant_type_from_pose_residue(
+        replacement_copy,
+        pyrosetta.rosetta.core.chemical.LOWER_TERMINUS_VARIANT,
+        replacement_index,
+    )
+    pose.replace_residue(
+        index, replacement_copy.residue(replacement_index), True
+    )
+    # pyrosetta.rosetta.core.pose.correctly_add_cutpoint_variants(pose)
+    for num in range(1, pose.num_chains() + 1):
+        if index == pose.chain_begin(num):
+            pyrosetta.rosetta.core.pose.add_variant_type_to_pose_residue(
+                pose,
+                pyrosetta.rosetta.core.chemical.LOWER_TERMINUS_VARIANT,
+                index,
+            )
+            pose.conformation().chains_from_termini()
+        if index == pose.chain_end(num):
+            pyrosetta.rosetta.core.pose.add_variant_type_to_pose_residue(
+                pose,
+                pyrosetta.rosetta.core.chemical.UPPER_TERMINUS_VARIANT,
+                index,
+            )
+            pose.conformation().chains_from_termini()
     return pose
 
 
@@ -80,6 +111,73 @@ def graft_and_dump_pdb(
     return dump_path
 
 
+def process_secondary_results(
+    secondary_results_table,
+    pose,
+    secondary_hit_out_dir,
+    source_file_dir,
+    table_label="",
+    pdb_label="",
+):
+    """
+    """
+    print(secondary_results_table)
+    if not os.path.isdir(secondary_hit_out_dir):
+        os.makedirs(secondary_hit_out_dir)
+    secondary_write_path = f"""{secondary_hit_out_dir
+                               }/secondary_double_ploop_hits{
+                               table_label
+                               }.json"""
+
+    # assert not os.path.exists(
+    #     secondary_write_path
+    # ), f"secondary hit data would overwrite file at: {secondary_write_path}"
+    # source_file_dir = f"{secondary_hit_out_dir}/source_files/"
+    # if not os.path.isdir(source_file_dir):
+    #     os.makedirs(source_file_dir)
+    secondary_grafted_loops_dir = (
+        f"{secondary_hit_out_dir}/grafted_loops_with_p_res/"
+    )
+    if not os.path.isdir(secondary_grafted_loops_dir):
+        os.makedirs(secondary_grafted_loops_dir)
+    if not os.path.isdir(source_file_dir):
+        os.makedirs(source_file_dir)
+    # Add a grafted file entry with phos rotamer to each row, dump the pdb
+    print("grafting and adding residue")
+    secondary_results_table[
+        "graft_and_pres_path"
+    ] = secondary_results_table.apply(
+        lambda row: graft_and_dump_pdb(
+            replace_res_from_pose(
+                pose.clone(),
+                pyrosetta.pose_from_file(row["inv_rot_file"]),
+                row["p_res_target"],
+                1,
+            ),
+            pyrosetta.pose_from_file(row["loop_file"]).split_by_chain()[1],
+            row["start_res"],
+            row["end_res"],
+            1,
+            f"""{secondary_grafted_loops_dir
+                }/{
+                row["name"].split("/")[-1].split(".pdb")[0]
+                }{pdb_label}_ploop_index_{
+                row["loop_index"]
+                }_pres_{
+                row["p_res_target"]
+                }.pdb""",
+        ),
+        axis=1,
+    )
+    secondary_results_table.apply(
+        lambda row: pyrosetta.pose_from_file(row["inv_rot_file"]).dump_pdb(
+            f'{source_file_dir}/{row["inv_rot_file"].split("/")[-1]}'
+        ),
+        axis=1,
+    )
+    secondary_results_table.to_json(secondary_write_path)
+
+
 def main():
     # flagsFile = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/initial_testing/misc_files/p_ligand_quiet.flags"
     flagsFile = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/initial_testing/misc_files/p_ligand_loud.flags"
@@ -93,6 +191,7 @@ def main():
     out_dir = sys.argv[3]
     primary_hit_dirname = sys.argv[4]
     secondary_hit_dirname = sys.argv[5]
+    overwrite = True
 
     # splits by helices
     ss_only_chains = ss_to_chains(pose, "H", "E")
@@ -132,9 +231,10 @@ def main():
         primary_hit_out_dir = f"{out_dir}/{primary_hit_dirname}"
         os.makedirs(primary_hit_out_dir, exist_ok=True)
         primary_write_path = f"{primary_hit_out_dir}/primary_double_ploop_hits_{pdb_name}_loop_{i}.json"
-        assert not os.path.exists(
-            primary_write_path
-        ), f"primary hit data would overwrite file at: {primary_write_path}"
+        if not overwrite:
+            assert not os.path.exists(
+                primary_write_path
+            ), f"primary hit data would overwrite file at: {primary_write_path}"
         source_file_dir = f"{primary_hit_out_dir}/source_files/"
         os.makedirs(source_file_dir, exist_ok=True)
         grafted_loops_dir = f"{primary_hit_out_dir}/grafted_loops/"
@@ -147,7 +247,7 @@ def main():
             "loop_insertion_path"
         ] = primary_results_table.apply(
             lambda row: graft_and_dump_pdb(
-                pose,
+                pose.clone(),
                 pyrosetta.pose_from_file(row["loop_file"]).split_by_chain()[1],
                 row["start_res"],
                 row["end_res"],
@@ -189,61 +289,15 @@ def main():
 
         # prepare all the output directories
         secondary_hit_out_dir = f"{out_dir}/{secondary_hit_dirname}"
-        if not os.path.isdir(secondary_hit_out_dir):
-            os.makedirs(secondary_hit_out_dir)
-        secondary_write_path = f"""{secondary_hit_out_dir
-                                   }/secondary_double_ploop_hits_{
-                                   pdb_name
-                                   }_loop_{
-                                   i
-                                   }.json"""
-
-        assert not os.path.exists(
-            secondary_write_path
-        ), f"secondary hit data would overwrite file at: {secondary_write_path}"
-        # source_file_dir = f"{secondary_hit_out_dir}/source_files/"
-        # if not os.path.isdir(source_file_dir):
-        #     os.makedirs(source_file_dir)
-        secondary_grafted_loops_dir = (
-            f"{secondary_hit_out_dir}/grafted_loops_with_p_res/"
+        sec_source_file_dir = f"{secondary_hit_out_dir}/source_files/"
+        process_secondary_results(
+            secondary_results_table,
+            pose,
+            secondary_hit_out_dir,
+            sec_source_file_dir,
+            table_label=f"_{pdb_name}_loop_{i}",
+            pdb_label=f"_reloop_{i}",
         )
-        if not os.path.isdir(secondary_grafted_loops_dir):
-            os.makedirs(secondary_grafted_loops_dir)
-
-        # Add a grafted file entry with phos rotamer to each row, dump the pdb
-
-        secondary_results_table[
-            "graft_and_pres_path"
-        ] = secondary_results_table.apply(
-            lambda row: graft_and_dump_pdb(
-                replace_res_from_pose(
-                    pose,
-                    pyrosetta.pose_from_file(row["inv_rot_file"]),
-                    row["p_res_target"],
-                    1,
-                ),
-                pyrosetta.pose_from_file(row["loop_file"]).split_by_chain()[1],
-                row["start_res"],
-                row["end_res"],
-                1,
-                f"""{secondary_grafted_loops_dir
-                    }/{
-                    row["name"].split("/")[-1].split(".pdb")[0]
-                    }_reloop_{i}_ploop_index_{
-                    row["loop_index"]
-                    }_pres_{
-                    row["p_res_target"]
-                    }.pdb""",
-            ),
-            axis=1,
-        )
-        secondary_results_table.apply(
-            lambda row: pyrosetta.pose_from_file(row["inv_rot_file"]).dump_pdb(
-                f'{source_file_dir}/{row["inv_rot_file"].split("/")[-1]}'
-            ),
-            axis=1,
-        )
-        secondary_results_table.to_json(secondary_write_path)
 
 
 if __name__ == "__main__":
