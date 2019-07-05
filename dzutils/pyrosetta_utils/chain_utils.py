@@ -391,3 +391,37 @@ def run_direct_segment_lookup(
     segment_lookup_mover.structure_store_path(database)
     segment_lookup_mover.apply(pose)
     return segment_lookup_mover
+
+
+def circular_permute(pose, position, many_loops=False, **kwargs):
+    """
+    Returns a pose that is a circular permutation of the input, cut at position
+
+    Only works on single chain poses, can return an iterable of more loop closures
+
+    Loops are not sensible closures (no relax)
+
+    kwargs are for loop close, defaults are dz's "sensible" defaults
+    """
+    assert bool(
+        position < len(pose.residues)
+    ), "Cut position cannot be the last residue"
+    assert bool(pose.num_chains() == 1), "pose must only have one chain"
+    cut_pose = add_cut(pose.clone(), position + 1)
+    chains = cut_pose.split_by_chain()
+    reordered = link_poses(chains[2], chains[1], rechain=True)
+    if kwargs:
+        loop_close_mover = run_direct_segment_lookup(reordered, **kwargs)
+    else:
+        loop_close_mover = run_direct_segment_lookup(
+            reordered, length=7, rmsd_tol=0.7
+        )
+    status = loop_close_mover.get_last_move_status()
+    if status != _pyrosetta.rosetta.protocols.moves.mstype_from_name(
+        "MS_SUCCESS"
+    ):
+        print("mover status: ", status)
+        return
+    if many_loops:
+        return iter(loop_close_mover.get_additional_output, None)
+    return reordered
