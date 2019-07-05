@@ -395,7 +395,7 @@ def run_direct_segment_lookup(
 
 def circular_permute(pose, position, many_loops=False, **kwargs):
     """
-    Returns a pose that is a circular permutation of the input, cut at position
+    Returns a pose that is a circular permutation of the input, cut at positions
 
     Only works on single chain poses, can return an iterable of more loop closures
 
@@ -425,3 +425,13 @@ def circular_permute(pose, position, many_loops=False, **kwargs):
     if many_loops:
         return iter(loop_close_mover.get_additional_output, None)
     return reordered
+
+
+def circular_permutations(pose, *positions, many_loops=False, **kwargs):
+    """
+    same as circular permutation, but attempts each of the values in positions
+    """
+    return [
+        circular_permute(pose, index, many_loops, **kwargs)
+        for index in positions
+    ]
