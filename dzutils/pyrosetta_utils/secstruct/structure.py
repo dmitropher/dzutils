@@ -41,6 +41,27 @@ class SecondaryStructureResidueContainer(object):
         self.residues = pose.residues[start_pos:end_pos]
         self.dssp_type = dssp_type
 
+    def __repr__(self):
+        return str(
+            {
+                "type": type(self),
+                "pose": self.pose,
+                "start_pos": self.start_pos,
+                "end_pos": self.end_pos,
+                "dssp_type": self.dssp_type,
+            }
+        )
+
+    def __str__(self):
+        s = (
+            f"""{type(self).__name__}:\n"""
+            f"""Pose:\n{self.pose}\n"""
+            f"""start_pos: {self.start_pos}\n"""
+            f"""end_pos: {self.end_pos}\n"""
+            f"""dssp_type: {self.dssp_type}"""
+        )
+        return s
+
     def get_range(self):
         """
         Returns a tuple (start_pos,end_pos)
