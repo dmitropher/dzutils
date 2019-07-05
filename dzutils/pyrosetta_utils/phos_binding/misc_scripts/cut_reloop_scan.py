@@ -224,6 +224,7 @@ def main():
         if primary_results_table is None:
             logging.info("no primary hits found for this pose")
             continue
+
         pdb_name = pose.pdb_info().name().split("/")[-1].split(".pdb")[0]
         # results.name = "double_ploop_hits"
 
