@@ -47,11 +47,13 @@ class SecondaryStructureResidueContainer(object):
         """
         return self.start_pos, self.end_pos
 
-    def resnum_list(self):
+    def resnum_list(self, upstream=0, downstream=0):
         """
         returns a list of residues that are in the container
         """
-        return [*range(self.start_pos, self.end_pos + 1)]
+        return [
+            *range(self.start_pos - upstream, self.end_pos + downstream + 1)
+        ]
 
     # TODO maybe get rid of this shift
     def frame_shift(self, n):

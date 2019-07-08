@@ -1,4 +1,4 @@
-from itertools import permutations
+from itertools import permutations, combinations
 import numpy as _np
 import pyrosetta as _pyrosetta
 from xbin import XformBinner as _xb
@@ -134,15 +134,26 @@ def pair_to_rt_dict(pose, resnum_1, resnum_2, **kwargs):
     }
 
 
-def loops_to_rt_dict(pose):
+def loops_to_rt_dict(pose, plus=0, minus=0):
     """
     Wrapper to hopefully conserve memory
+
+    includes some modifications to loop selection to help with bad hits
     """
     return [
         pair_to_rt_dict(pose, i, j)
         for loop in parse_structure_from_dssp(pose, "L")
-        for i, j in permutations(loop.resnum_list(), 2)
-        if i < j
+
+        for start, end in [
+            (
+                loop.resnum_list(upstream=minus, downstream=plus)[0],
+                loop.resnum_list(upstream=minus, downstream=plus)[-1],
+            )
+        ]
+        for i, j in combinations(
+            loop.resnum_list(upstream=minus, downstream=plus), 2
+        )
+        if i > (end + start) / 2 and j > (end + start) / 2
     ]
 
 
