@@ -27,41 +27,14 @@ def pose_from_chain(pose, chain):
     return pose.split_by_chain()[chain]
 
 
-def pose_excluding_chain(pose, *chain_nums):
-    """
-    Returns a pose without the listed chain
-    """
-    chains = [
-        p
-        for i, p in enumerate(pose.split_by_chain(), 1)
-        if i not in chain_nums
-    ]
-    new_pose = chains[0]
-    for i, chain in enumerate(chains[1:], 1):
-        new_pose.append_pose_by_jump(chain, i)
-    return new_pose
-
-
-def replace_chain_by_number(pose, replacement, chain_num):
-    """
-    Return pose, but with replacement at chain chain_num
-    """
-    return link_poses(
-        *[
-            (c if i != chain_num else replacement)
-            for i, c in enumerate(pose.split_by_chain(), 1)
-        ],
-        rechain=True
-    )
-
-
-def posnum_in_chain(pose, resnum):
-    """
-    returns resnum - pose.chain_begin(resnum) + 1
-
-    sometimes i wanna keep track of stuff when i split by chain ok
-    """
-    return resnum - pose.chain_begin(resnum) + 1
+# this is broken, chain_begin returns the first res of the chain_num
+# def posnum_in_chain(pose, resnum):
+#     """
+#     returns resnum - pose.chain_begin(resnum) + 1
+#
+#     sometimes i wanna keep track of stuff when i split by chain ok
+#     """
+#     return resnum - pose.chain_begin(resnum) + 1
 
 
 def add_cut(pose, index, new_pose=False):
@@ -106,9 +79,14 @@ def link_poses(*poses, rechain=False):
     target = _pyrosetta.rosetta.core.pose.Pose()
     target.detached_copy(poses[0])
     # target = poses[0].clone()
+    # n_jump = target.num_jump()
+    assert bool(len(target.residues) > 0), "Cannot link poses with 0 residues!"
     if rechain:
-        for i, pose in enumerate(poses[1:], 1):
-            target.append_pose_by_jump(pose, i)
+        for i, pose in enumerate(poses[1:]):
+            assert bool(
+                len(pose.residues) > 0
+            ), "Cannot link poses with 0 residues!"
+            target.append_pose_by_jump(pose, 1)
         # target.conformation().chains_from_termini()
     else:
         for pose in poses[1:]:
@@ -116,6 +94,36 @@ def link_poses(*poses, rechain=False):
                 target, pose, False
             )
     return target
+
+
+def replace_chain_by_number(pose, replacement, chain_num):
+    """
+    Return pose, but with replacement at chain chain_num
+    """
+    return link_poses(
+        *[
+            (c if i != chain_num else replacement)
+            for i, c in enumerate(pose.split_by_chain(), 1)
+        ],
+        rechain=True
+    )
+
+
+def pose_excluding_chain(pose, *chain_nums):
+    """
+    Returns a pose without the listed chain
+    """
+    chains = [
+        p
+        for i, p in enumerate(pose.split_by_chain(), 1)
+        if i not in chain_nums
+    ]
+    # new_pose = chains[0]
+    # for i, chain in enumerate(chains[1:], 1):
+    #     new_pose.append_pose_by_jump(chain, i)
+    print("linking chains")
+    new_pose = link_poses(*chains, rechain=True)
+    return new_pose
 
 
 def trim_pose_to_term(pose, target, terminus=None):
@@ -383,3 +391,37 @@ def run_direct_segment_lookup(
     segment_lookup_mover.structure_store_path(database)
     segment_lookup_mover.apply(pose)
     return segment_lookup_mover
+
+
+def circular_permute(pose, position, many_loops=False, **kwargs):
+    """
+    Returns a pose that is a circular permutation of the input, cut at position
+
+    Only works on single chain poses, can return an iterable of more loop closures
+
+    Loops are not sensible closures (no relax)
+
+    kwargs are for loop close, defaults are dz's "sensible" defaults
+    """
+    assert bool(
+        position < len(pose.residues)
+    ), "Cut position cannot be the last residue"
+    assert bool(pose.num_chains() == 1), "pose must only have one chain"
+    cut_pose = add_cut(pose.clone(), position + 1)
+    chains = cut_pose.split_by_chain()
+    reordered = link_poses(chains[2], chains[1], rechain=True)
+    if kwargs:
+        loop_close_mover = run_direct_segment_lookup(reordered, **kwargs)
+    else:
+        loop_close_mover = run_direct_segment_lookup(
+            reordered, length=7, rmsd_tol=0.7
+        )
+    status = loop_close_mover.get_last_move_status()
+    if status != _pyrosetta.rosetta.protocols.moves.mstype_from_name(
+        "MS_SUCCESS"
+    ):
+        print("mover status: ", status)
+        return
+    if many_loops:
+        return iter(loop_close_mover.get_additional_output, None)
+    return reordered

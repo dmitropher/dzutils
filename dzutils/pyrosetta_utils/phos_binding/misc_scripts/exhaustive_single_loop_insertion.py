@@ -6,6 +6,8 @@ import itertools as it
 import os
 
 # import gc
+
+# import gc
 import sys
 
 import dask.bag as db
@@ -22,15 +24,28 @@ from dzutils.pyrosetta_utils.chain_utils import trim_pose_to_term
 from dzutils.pyrosetta_utils.chain_utils import pose_excluding_chain
 from dzutils.pyrosetta_utils.chain_utils import replace_chain_by_number
 
-def closed_loop_generator(pose,*args,**kwargs):
+
+def closed_loop_generator(pose, *args, **kwargs):
 
     working_pose = pose.clone()
+    print("running direct segment lookup")
     segment_lookup_mover = run_direct_segment_lookup(
         working_pose, length=8, cluster_tol=0.5, rmsd_tol=0.5
     )
-    if working_pose:
+    print("mover complete")
+
+    # Remember to check for NULL !!!
+    status = segment_lookup_mover.get_last_move_status()
+    if status != pyrosetta.rosetta.protocols.moves.mstype_from_name(
+        "MS_SUCCESS"
+    ):
+        print("mover status: ", status)
+        return
+    yield working_pose
+    for working_pose in iter(segment_lookup_mover.get_additional_output, None):
+        print("popped pose from mover")
+        print(working_pose)
         yield working_pose
-        working_pose = segment_lookup_mover.get_additional_output()
 
 
 def default_loop_close(pose, name, outdir):
@@ -72,15 +87,77 @@ def generate_name(pose, chain_begin, chain_end, cut_begin, cut_end):
             }-{cut_end
             }"""
 
-#for a different commit
-# def reorder_chains_for_loop_closure(pose,):
-#     replace_chain_by_number(
-#         replace_chain_by_number(
-#             pose.clone(), chain_begin, chain_begin_num
-#         ),
-#         chain_end,
-#         chain_end_num,
-#     )
+
+def reorder_chains_for_closure(pose, chain_begin_num, chain_end_num):
+    """
+    returns pose with chain_begin as chain 1, and end as chain 2
+
+    was necessary at some point for the loop closure method
+
+    With only two chains it can bug out, hence the weird ternary operator
+    """
+    print(f"reordering chains: begin {chain_begin_num} end {chain_end_num}")
+    return (
+        link_poses(
+            pose.split_by_chain()[chain_begin_num],
+            pose.split_by_chain()[chain_end_num],
+            pose_excluding_chain(pose, chain_begin_num, chain_end_num),
+            rechain=True,
+        )
+        if pose.num_chains() > 2
+        else link_poses(
+            pose.split_by_chain()[chain_begin_num],
+            pose.split_by_chain()[chain_end_num],
+            rechain=True,
+        )
+    )
+
+
+def exhaustive_single_loop_insertion(pose, deletion_amount, *args, **kwargs):
+    """
+    Takes arguments for loop closure method
+    """
+
+    num_chains = pose.num_chains()
+    chain_pair_iter = it.permutations(range(1, num_chains + 1), 2)
+    dels = (range(0, deletion_amount),) * 2
+    for chain_begin_num, chain_end_num in chain_pair_iter:
+        for cut_begin, cut_end in it.product(*dels):
+            # gc.collect()
+            print("attempting cut begin/end: ", cut_begin, cut_end)
+            print("chains begin/end: ", chain_begin_num, chain_end_num)
+            if cut_end >= len(
+                pose.split_by_chain()[chain_end_num].residues
+            ) or cut_begin >= len(
+                pose.split_by_chain()[chain_begin_num].residues
+            ):
+                print("not computing begin/end: ", cut_begin, cut_end)
+                continue
+            chain_begin = trim_chain(
+                pose.clone(), chain_begin_num, cut_begin, "chain_end"
+            )
+            chain_end = trim_chain(
+                pose.clone(), chain_end_num, cut_end, "chain_begin"
+            )
+            trimmed_pose = replace_chain_by_number(
+                replace_chain_by_number(
+                    pose.clone(), chain_begin, chain_begin_num
+                ),
+                chain_end,
+                chain_end_num,
+            )
+            print("chains trimmed")
+            reordered_pose = reorder_chains_for_closure(
+                trimmed_pose, chain_begin_num, chain_end_num
+            )
+            print("chains reordered")
+            for out_pose in closed_loop_generator(
+                reordered_pose, *args, **kwargs
+            ):
+                print("pose reloop successful")
+                print(out_pose)
+                yield out_pose
+
 
 def check_for_client():
     try:
@@ -233,60 +310,6 @@ def run_with_dask(pose, dels, chain_pair_iter, outdir, client):
     loop_closed_fut.compute()
 
 
-def exhaustive_single_loop_insertion(pose, outdir, deletion_amount):
-
-    num_chains = pose.num_chains()
-    chain_pair_iter = it.permutations(range(1, num_chains + 1), 2)
-    dels = (range(0, deletion_amount),) * 2
-
-    for chain_begin_num, chain_end_num in chain_pair_iter:
-        for cut_begin, cut_end in it.product(*dels):
-            print("attempting cut begin/end: ", cut_begin, cut_end)
-            print("chains begin/end: ", chain_begin_num, chain_end_num)
-            if cut_end > len(
-                pose.split_by_chain()[chain_begin_num].residues
-            ) or cut_begin > len(
-                pose.split_by_chain()[chain_end_num].residues
-            ):
-                print("not computing begin/end: ", cut_begin, cut_end)
-                continue
-            chain_begin = trim_chain(
-                pose, chain_begin_num, cut_begin, "chain_end"
-            )
-            chain_end = trim_chain(pose, chain_end_num, cut_end, "chain_begin")
-            replace_chain_by_number(
-                replace_chain_by_number(
-                    pose.clone(), chain_begin, chain_begin_num
-                ),
-                chain_end,
-                chain_end_num,
-            )
-            name = generate_name(
-                pose, chain_begin_num, chain_end_num, cut_begin, cut_end
-            )
-
-            reordered_pose = (
-                link_poses(
-                    *(
-                        pose.split_by_chain()[chain_begin_num],
-                        pose.split_by_chain()[chain_end_num],
-                    ),
-                    pose_excluding_chain(pose, chain_begin_num, chain_end_num),
-                    rechain=True,
-                )
-                if pose.num_chains() > 2
-                else link_poses(
-                    *(
-                        pose.split_by_chain()[chain_begin_num],
-                        pose.split_by_chain()[chain_end_num],
-                    ),
-                    rechain=True,
-                )
-            )
-
-            default_loop_close(reordered_pose, name, outdir)
-
-
 def main():
     flagsFile = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/initial_testing/misc_files/cluster_altered.flags"
     flags = read_flag_file(flagsFile)
@@ -320,7 +343,7 @@ def main():
                 chain_end = trim_chain(
                     pose, chain_end_num, cut_end, "chain_begin"
                 )
-                replace_chain_by_number(
+                pose = replace_chain_by_number(
                     replace_chain_by_number(
                         pose.clone(), chain_begin, chain_begin_num
                     ),
@@ -331,26 +354,28 @@ def main():
                     pose, chain_begin_num, chain_end_num, cut_begin, cut_end
                 )
 
-                reordered_pose = (
-                    link_poses(
-                        *(
-                            pose.split_by_chain()[chain_begin_num],
-                            pose.split_by_chain()[chain_end_num],
-                        ),
-                        pose_excluding_chain(
-                            pose, chain_begin_num, chain_end_num
-                        ),
-                        rechain=True,
-                    )
-                    if pose.num_chains() > 2
-                    else link_poses(
-                        *(
-                            pose.split_by_chain()[chain_begin_num],
-                            pose.split_by_chain()[chain_end_num],
-                        ),
-                        rechain=True,
-                    )
+                reordered_pose = reorder_chains_for_closure(
+                    pose, chain_begin_num, chain_end_num
                 )
+                #     link_poses(
+                #         *(
+                #             pose.split_by_chain()[chain_begin_num],
+                #             pose.split_by_chain()[chain_end_num],
+                #         ),
+                #         pose_excluding_chain(
+                #             pose, chain_begin_num, chain_end_num
+                #         ),
+                #         rechain=True,
+                #     )
+                #     if pose.num_chains() > 2
+                #     else link_poses(
+                #         *(
+                #             pose.split_by_chain()[chain_begin_num],
+                #             pose.split_by_chain()[chain_end_num],
+                #         ),
+                #         rechain=True,
+                #     )
+                # )
 
                 default_loop_close(reordered_pose, name, outdir)
 
