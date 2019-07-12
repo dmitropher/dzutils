@@ -119,6 +119,7 @@ def scan_for_inv_rot(
         ),
         axis=1,
     )
+    # TODO - include the inv rot reference atoms as well as loop func to bb start
 
     # load inv_rot table and dict
     inv_rot_table, inv_rot_dict = load_table_and_dict(

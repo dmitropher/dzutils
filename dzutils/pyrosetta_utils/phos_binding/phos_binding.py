@@ -80,6 +80,7 @@ def get_loop_xform_dicts(pose, num_contacts, *args, loop_chain=1, **kwargs):
         )
         for p_atom_i, resnum in p_atoms_in_pose(pose)
     ]
+    # TODO add reference atoms here
     xform_dicts = [
         {
             "file": pose.pdb_info().name(),
