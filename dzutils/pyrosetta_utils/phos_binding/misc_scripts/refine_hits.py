@@ -75,21 +75,21 @@ def build_hbond_cst(
             build_harmonic_pair_constraint(
                 target_rotamer_resnum,
                 hbond.acc_atm(),
-                hbond.don_res(),
                 hbond.don_hatm(),
+                hbond.don_res(),
                 value=hbond.get_HAdist(check_pose),
                 sd=0.125,
             ),
-            # build_harmonic_pair_constraint(
-            #     target_rotamer_resnum,
-            #     hbond.acc_atm(),
-            #     check_pose.residue(hbond.don_res()).atom_base(
-            #         hbond.don_hatm()
-            #     ),
-            #     hbond.don_res(),
-            #     value=hbond.get_HAdist(check_pose),
-            #     sd=0.125
-            # ),
+            build_harmonic_pair_constraint(
+                target_rotamer_resnum,
+                hbond.acc_atm(),
+                check_pose.residue(hbond.don_res()).atom_base(
+                    hbond.don_hatm()
+                ),
+                hbond.don_res(),
+                value=hbond.get_HAdist(check_pose),
+                sd=0.125,
+            ),
         )
     ]
     return constraints
