@@ -65,6 +65,14 @@ def stub_to_homog(stub):
     return rotation_translation_to_homog(stub.M, stub.v)
 
 
+def homog_from_residue(
+    residue, center_atom="CA", atom1="N", atom2="CA", atom3="C"
+):
+    return stub_to_homog(
+        _stub_from_residue(residue, center_atom, atom1, atom2, atom3)
+    )
+
+
 def rt_to_homog(rt):
     """
     Takes a rosetta RT and returns a h xform
