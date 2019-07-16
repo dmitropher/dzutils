@@ -182,6 +182,11 @@ def phospho_residue_inverse_rotamer_rts(residue):
 
 
 def num_bb_contacts(pose, resnum, atom_i):
+    """
+    Only returns bb contacts where bb is the donor.
+
+    TODO fix this
+    """
     contacts = sum(
         (
             hbond.don_hatm_is_protein_backbone()
