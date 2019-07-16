@@ -3,6 +3,7 @@ import math as _math
 from dzutils.pyrosetta_utils.geometry.rt_utils import (
     stub_from_residue as _stub_from_residue,
 )
+from pyrosetta.rosetta.numeric import xyzVector_double_t, xyzMatrix_double_t
 
 
 def np_rot_trans_to_homog(rotation, translation):
@@ -28,6 +29,33 @@ def rotation_translation_to_homog(rotation, translation):
             [0, 0, 0, 1],
         ]
     )
+
+
+def np_homog_to_rosetta_rotation_translation(xform):
+    """
+    takes a numpy homogenous transform and converts it to Rosetta (rot,trans)
+    """
+    rotation = xform[..., :3, :3]
+    translation = xform[:3, 3]
+    rosetta_rotation = xyzMatrix_double_t()
+    (
+        rosetta_rotation.xx,
+        rosetta_rotation.xy,
+        rosetta_rotation.xz,
+        rosetta_rotation.yx,
+        rosetta_rotation.yy,
+        rosetta_rotation.yz,
+        rosetta_rotation.zx,
+        rosetta_rotation.zy,
+        rosetta_rotation.zz,
+    ) = rotation.flatten()
+    rosetta_translation = xyzVector_double_t()
+    (
+        rosetta_translation.x,
+        rosetta_translation.y,
+        rosetta_translation.z,
+    ) = translation
+    return rosetta_rotation, rosetta_translation
 
 
 def stub_to_homog(stub):
