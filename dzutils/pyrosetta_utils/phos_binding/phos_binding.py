@@ -90,6 +90,7 @@ def get_loop_xform_dicts(pose, num_contacts, *args, loop_chain=1, **kwargs):
             "func_to_bb_start": generate_pose_rt_between_res(
                 pose, resnum, 1, (p_atom, p_atom, bonded_1, bonded_2)
             ),
+            "alignment_atoms": (p_atom, p_atom, bonded_1, bonded_2),
         }
         for p_atom, others, resnum in p_atoms
         if len(others) >= num_contacts
