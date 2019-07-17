@@ -5,12 +5,7 @@ import sys
 import pyrosetta
 
 # from dzutils.pyrosetta_utils.phos_binding import get_loop_xform_dicts
-from dzutils.pyrosetta_utils import (
-    residues_with_element,
-    hbond_to_residue,
-    atom_indices_with_element,
-    bonded_atoms,
-)
+from dzutils.pyrosetta_utils import residues_with_element, hbond_to_residue
 from dzutils.pyrosetta_utils.phos_binding import replace_p_res_with_phosphate
 from dzutils.sutils import read_flag_file
 
@@ -23,16 +18,6 @@ flags_str = " ".join(flags.replace("\n", " ").split())
 pyrosetta.init(flags_str)
 
 
-# pdb_dir = "/home/dzorine/phos_binding/ploop_pdbs/ploop_set_2/3_bb_contacts"
-#
-# pdb_store = (
-#     "/home/dzorine/phos_binding/ploop_pdbs/ploop_set_2/3_bb_contacts_spinnable"
-# )
-# pdb_paths = pdb_files_in_dir(pdb_dir)[:100]
-# # subset = pdb_paths
-# poses = (maybe_load(p) for p in pdb_paths)
-# dicts = list()
-# for pose in poses:
 pose = pyrosetta.pose_from_file(sys.argv[1])
 out_path = sys.argv[2]
 n_contacts = 3 if len(sys.argv) < 4 else int(sys.argv[3])
