@@ -180,7 +180,7 @@ def process_secondary_results(
 
 def main():
     # flagsFile = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/initial_testing/misc_files/p_ligand_quiet.flags"
-    flagsFile = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/initial_testing/misc_files/p_ligand_loud.flags"
+    flagsFile = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/initial_testing/misc_files/p_ligand_quiet.flags"
     flags = read_flag_file(flagsFile)
     flags_str = " ".join(flags.replace("\n", " ").split())
     print(flags_str)
