@@ -36,12 +36,6 @@ to_remove = [
             hbond
             for hbond in hbond_to_residue(phos_pose, resnum)
             if hbond.don_hatm_is_protein_backbone()
-            # Unecessary check with single phosphate
-            # and hbond.acc_atm()
-            # in bonded_atoms(
-            #     phos_pose.residue(resnum),
-            #     atom_indices_with_element(phos_pose.residue(resnum), "P")[0],
-            # )
         ]
     )
     < n_contacts
@@ -98,15 +92,3 @@ for i, p in enumerate(poses, 1):
     new_name = f"{base_name_old}_p{i}_spinnable.pdb"
     new_out_path = f"{out_path}/{new_name}"
     phos_pose.dump_pdb(new_out_path)
-# Check if the first and last res of chain 1 are free to spin
-
-# if not, pre/append a residue, fix omegas
-# xform_dicts = get_loop_xform_dicts(pose, n_contacts)
-# if xform_dicts:
-#     dicts.extend(xform_dicts)
-
-# loop_table = pd.DataFrame(dicts)
-# At this point table is made with things ready to spin
-
-# begin dict filling loop
-# Max cycles 10k, raise RuntimeError if exceeded

@@ -10,7 +10,8 @@ from dzutils.pyrosetta_utils.phos_binding import get_loop_xform_dicts
 from dzutils.pyrosetta_utils import residues_with_element
 from dzutils.sutils import read_flag_file
 from dzutils.pdb_file_utils import pdb_files_in_dir
-from dzutils.pyrosetta_utils.chain_utils import rechain_resname
+
+# from dzutils.pyrosetta_utils.chain_utils import rechain_resname
 
 
 # from dzutils.pyrosetta_utils.geometry.pose_xforms import generate_pose_rt_between_res,get_func_to_end
@@ -34,7 +35,9 @@ flags_str = " ".join(flags.replace("\n", " ").split())
 pyrosetta.init(flags_str)
 
 
-pdb_dir = "/home/dzorine/phos_binding/ploop_pdbs/ploop_set_3/spinnable_3_contact"
+pdb_dir = (
+    "/home/dzorine/phos_binding/ploop_pdbs/ploop_set_3/spinnable_3_contact"
+)
 pdb_paths = pdb_files_in_dir(pdb_dir)
 # subset = pdb_paths
 poses = (maybe_load(p) for p in pdb_paths)
