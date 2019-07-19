@@ -14,7 +14,7 @@ from dzutils.pyrosetta_utils import (
     build_hbond_set,
 )
 
-from dzutils.pyrosetta_utils.phos_binding import num_bb_contacts
+# from dzutils.pyrosetta_utils.phos_binding import num_bb_contacts
 from dzutils.pyrosetta_utils.geometry.homog import (
     np_homog_to_rosetta_rotation_translation,
 )
@@ -77,7 +77,7 @@ def build_hbond_cst(
         cst
         for hbond in hbond_set.residue_hbonds(check_index)
         if hbond.don_hatm_is_protein_backbone()
-        and hbond.acc_atm() in acceptor_atoms
+        if hbond.acc_atm() in acceptor_atoms
         for cst in (
             build_harmonic_pair_constraint(
                 target_rotamer_resnum,
@@ -90,12 +90,12 @@ def build_hbond_cst(
             # build_harmonic_pair_constraint(
             #     target_rotamer_resnum,
             #     hbond.acc_atm(),
+            #     hbond.don_res(),
             #     check_pose.residue(hbond.don_res()).atom_base(
             #         hbond.don_hatm()
             #     ),
-            #     hbond.don_res(),
-            #     value=hbond.get_HAdist(check_pose),
-            #     sd=0.125
+            #     value=2.5,
+            #     sd=0.25,
             # ),
         )
     ]
