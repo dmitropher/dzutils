@@ -144,15 +144,9 @@ def loops_to_rt_dict(pose, plus=0, minus=0):
     return [
         pair_to_rt_dict(pose, i, j)
         for loop in parse_structure_from_dssp(pose, "L")
-<<<<<<< HEAD
-<<<<<<< HEAD
         for i, j in permutations(loop.resnum_list(), 2)
         if i < j
         if i != 1
-=======
-
-=======
->>>>>>> some loop details in loops_to_rt_dict
         for start, end in [
             (
                 loop.resnum_list(upstream=minus, downstream=plus)[0],
@@ -163,10 +157,6 @@ def loops_to_rt_dict(pose, plus=0, minus=0):
             loop.resnum_list(upstream=minus, downstream=plus), 2
         )
         if i > (end + start) / 2 and j > (end + start) / 2
-<<<<<<< HEAD
->>>>>>> added some rt generation parameters
-=======
->>>>>>> some loop details in loops_to_rt_dict
     ]
 
 
