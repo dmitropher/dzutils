@@ -3,7 +3,7 @@
 # continued chemical properties of these elements.
 import pyrosetta.rosetta as _pyr
 from itertools import groupby as _gb
-from dzutils.pyrosetta_utils import or_compose_residue_selectors as or_combine
+from ..util import or_compose_residue_selectors as or_combine
 
 
 class SecondaryStructureContainerFactory:
