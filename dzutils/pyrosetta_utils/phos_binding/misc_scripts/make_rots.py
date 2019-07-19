@@ -11,6 +11,8 @@ pyrosetta.init(
     -extra_res_fa /home/dzorine/phos_binding/p_compounds/residues/PTR.params
     -packing:ex1
     -packing:ex2
+"""
+    """
     -packing:ex3
     -packing:ex4
 
