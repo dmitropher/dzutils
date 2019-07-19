@@ -14,7 +14,7 @@ from dzutils.pyrosetta_utils import (
     build_hbond_set,
 )
 
-from dzutils.pyrosetta_utils.phos_binding import num_bb_contacts
+# from dzutils.pyrosetta_utils.phos_binding import num_bb_contacts
 from dzutils.pyrosetta_utils.geometry.homog import (
     np_homog_to_rosetta_rotation_translation,
 )
@@ -64,13 +64,20 @@ def build_hbond_cst(
     )
     check_pose = grafted_pose.clone()
     pyrosetta.rosetta.core.pose.append_pose_to_pose(check_pose, rot_pose, True)
+    test_file_path = (
+        f"{check_pose.pdb_info().name().split('.pdb')[0]}_check.pdb"
+    )
+    print(test_file_path)
+    print("building constraints for:")
+    print(f"{check_pose.residue(target_rotamer_resnum)}")
+    check_pose.dump_pdb(test_file_path)
     check_index = len(check_pose.residues)
     hbond_set = build_hbond_set(check_pose)
     constraints = [
         cst
         for hbond in hbond_set.residue_hbonds(check_index)
         if hbond.don_hatm_is_protein_backbone()
-        and hbond.acc_atm() in acceptor_atoms
+        if hbond.acc_atm() in acceptor_atoms
         for cst in (
             build_harmonic_pair_constraint(
                 target_rotamer_resnum,
@@ -83,12 +90,12 @@ def build_hbond_cst(
             # build_harmonic_pair_constraint(
             #     target_rotamer_resnum,
             #     hbond.acc_atm(),
+            #     hbond.don_res(),
             #     check_pose.residue(hbond.don_res()).atom_base(
             #         hbond.don_hatm()
             #     ),
-            #     hbond.don_res(),
-            #     value=hbond.get_HAdist(check_pose),
-            #     sd=0.125
+            #     value=2.5,
+            #     sd=0.25,
             # ),
         )
     ]
