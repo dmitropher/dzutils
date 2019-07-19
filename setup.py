@@ -15,5 +15,6 @@ setup(
         "dzutils/pyrosetta_utils/phos_binding",
         "dzutils/pyrosetta_utils/geometry",
         "dzutils/pyrosetta_utils/test_tools",
+        "dzutils/pyrosetta_utils/secstruct",
     ],
 )
