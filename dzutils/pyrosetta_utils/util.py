@@ -197,7 +197,6 @@ def build_hbond_set(
 
 
 def hbond_to_residue(pose, resnum, hbond_set=None, vec=False):
-
     """
     Returns a list of all the hbonding residues to the given residue
 
