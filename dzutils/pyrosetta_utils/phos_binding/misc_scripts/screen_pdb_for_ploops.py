@@ -24,6 +24,87 @@ def phos_bonded_atoms_by_index(residue):
     }
 
 
+def exclude_self_and_non_bb_hbonds(hbond_collection, *acceptor_atoms):
+    return [
+        b
+        for b in hbond_collection
+        if b.acc_atm() in acceptor_atoms
+        and b.don_hatm_is_protein_backbone()
+        and b.don_res() != b.acc_res()
+    ]
+
+
+def get_bb_hbonds(pose):
+
+    hbond_set = build_hbond_set(pose)
+
+    return [
+        (
+            # Get all the hbonds
+            atom_i,
+            exclude_self_and_non_bb_hbonds(
+                hbond_to_residue(pose, resnum, hbond_set=hbond_set, vec=False),
+                *acceptor_atoms,
+            ),
+        )
+        # And a dict of acceptable acceptor atoms (atoms bound to P)
+        # keys are p atoms, values are lists of bound atoms
+        for resnum in residues_with_element(pose, "P")
+        for atom_i, acceptor_atoms in phos_bonded_atoms_by_index(
+            pose.residue(resnum)
+        ).items()
+    ]
+
+
+def get_acceptor_res_for_hbond_collection(hbond_collection):
+    """
+    Meant to make sure that hbonds have been assigned to atom indices sanely
+    """
+    acceptor_res = list(set([hbond.acc_res() for hbond in hbond_collection]))
+    assert len(acceptor_res) == 1, "An error occured in hbond collection."
+    return acceptor_res[0]
+
+
+
+
+def minimal_fragments_by_contact_number(
+    pose, min_contacts=1, append_factor=0
+):
+    """
+    Returns fragment dict with acceptor res and the span between donor residues
+
+    append factor determines number of additional residues appended/prepended
+
+    """
+
+    hbond_collection = get_bb_hbonds(pose)
+
+    pose_size = len(pose.residues )
+
+    append_ranges = [range(append_factor + 1)] * 2
+    return [
+        {
+            "acceptor_res": r,
+            "start": min(*contact_set) - x,
+            "end": max(*contact_set) + y,
+        }
+        for hbonds in hbond_collection
+        for r in [get_acceptor_res_for_hbond_collection(hbonds)]
+        if len(hbonds) >= min_contacts
+        for contact_set in it.combinations(
+            [bond.don_res() for bond in hbonds], min_contacts
+        )
+        for x, y in it.product(*append_ranges)
+        if max(*contact_set) - min(*contact_set) + abs(x + y) < 11
+        if min(*contact_set) - x > 1 and max(*contact_set) + y < pose_size
+        if min(*contact_set) - x > r or r > max(*contact_set) + y
+    ]
+
+
+def minimal_fragments_by_secondary_structure (pose):
+    """
+    """
+
 ploop_flags_file = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/initial_testing/misc_files/p_ligand.flags"
 run_pyrosetta_with_flags(ploop_flags_file)
 # get pose
@@ -34,85 +115,35 @@ name = pose.pdb_info().name().split("/")[-1].split(".pdb")[0]
 # Scan pose for phosphorus containing residues
 # extract hbonds to these residues where:
 # vec False to use list rather than rosetta vector
-hbond_set = build_hbond_set(pose)
-all_hbonds = {
-    # index them by resnum of P atom
-    resnum: {
-        # Get all the hbonds
-        "hbonds": hbond_to_residue(
-            pose, resnum, hbond_set=hbond_set, vec=False
-        ),
-        # And a dict of acceptable acceptor atoms (atoms bound to P)
-        # keys are p atoms, values are lists of bound atoms
-        "p_bonded_atoms": phos_bonded_atoms_by_index(residue),
-    }
-    for resnum in residues_with_element(pose, "P")
-}
-bb_hbonds = {
-    # Take resnums
-    # Keep the donor resnums list
-    r: [
-        {
-            atom_i: [
-                b.don_res()
-                for b in info["hbonds"]
-                if b.acc_atm() in acceptor_atoms
-                and b.don_hatm_is_protein_backbone()
-                and b.don_res() != r
-            ]
-        }
-        for atom_i, acceptor_atoms in info["p_bonded_atoms"].items()
-        # Keep donor resnums where the acceptor atom is bonded to Phosphorus
-        # And the donor atom is a backbone atom
-    ]
-    # Derive the above info by scanning the P containing residues
-    for r, info in all_hbonds.items()
-    if info["hbonds"]
-}
+
 
 # no support for different append/prepend values
 append_factor = 3  # +- 0-3 residues
-append_ranges = [range(append_factor + 1)] * 2
+
 
 num_contacts = int(sys.argv[3])
 
 pose_size = len(pose.residues)
-# print(bb_hbonds)
+
+
 # Extract contiguous loops with these contacts:
 #   - for each bb pair, check if intervening sequence is under 10 res
 #   - prepend and apppend +- 3 residues on each side if they exist
-print(bb_hbonds)
-loop_pose_dicts = [
-    {
-        "pose": link_poses(
-            pyrosetta.rosetta.protocols.grafting.return_region(
-                pose.clone(), r, r
-            ),
-            pyrosetta.rosetta.protocols.grafting.return_region(
-                pose, min(*contact_set) - x, max(*contact_set) + y
-            ),
-            rechain=True,
-        ),
-        "res": r,
-        "start": min(*contact_set) - x,
-        "end": max(*contact_set) + y,
-    }
-    for r, per_p_atom_contact_list in bb_hbonds.items()
-    for atom_i_contacts in per_p_atom_contact_list
-    for atom_i, contacts in atom_i_contacts.items()
-    if len(contacts) >= num_contacts
-    for contact_set in it.combinations(contacts, num_contacts)
-    for x, y in it.product(*append_ranges)
-    if max(*contact_set) - min(*contact_set) + abs(x + y) < 11
-    if min(*contact_set) - x > 1 and max(*contact_set) + y < pose_size
-    if min(*contact_set) - x > r or r > max(*contact_set) + y
-]
 
-for d in loop_pose_dicts:
-    p = d["pose"]
-    r = d["res"]
+for d in minimal_fragments_by_contact_number(
+    pose,
+    min_contacts=num_contacts,
+    append_factor=append_factor,
+):
+
+    r = d["acceptor_res"]
     s = d["start"]
     e = d["end"]
+    p = link_poses(
+        pyrosetta.rosetta.protocols.grafting.return_region(pose.clone(), r, r),
+        pyrosetta.rosetta.protocols.grafting.return_region(pose, s, e),
+        rechain=True,
+    )
     p.dump_pdb(
         f"{outdir}/{name}_{num_contacts}-contacts_phos-{r}_frag_{s}-{e}.pdb"
     )
