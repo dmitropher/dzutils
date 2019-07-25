@@ -99,9 +99,38 @@ def minimal_fragments_by_contact_number(pose, min_contacts=1, append_factor=0):
     ]
 
 
-def minimal_fragments_by_secondary_structure(pose):
+def minimal_fragments_by_secondary_structure(
+    pose, *struct_types, min_contacts=1, proximity=5
+):
     """
+    returns fragments with adjacent secondary structure to contacts
+
+    Loops are not considered to be secondary structure
     """
+    bb_hbonds = get_bb_hbonds(pose)
+
+    struct_list = parse_structure_from_dssp(pose, *struct_types)
+    sec_struct_by_start_pos = {
+        struct.start_pos: struct for struct in struct_list
+    }
+    sec_struct_by_end_pos = {struct.end_pos: struct for struct in struct_list}
+    contacts = [
+        (r, min(*contact_set), max(*contact_set))
+        for hbonds in hbond_collection
+        for r in [get_acceptor_res_for_hbond_collection(hbonds)]
+        if len(hbonds) >= min_contacts
+        for contact_set in it.combinations(
+            [bond.don_res() for bond in hbonds], min_contacts
+        )
+        if max(*contact_set) - min(*contact_set) < 11
+        if min(*contact_set) - x > 1 and max(*contact_set) + y < pose_size
+    ]
+    for resnum, start_contact, end_contact in contacts:
+        end_structs = [
+            sec_struct_by_end_pos[i]
+            for i in range(end_contact, end_contact + proximity + 1)
+            if i in sec_struct_by_end_pos
+        ]
 
 
 ploop_flags_file = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/initial_testing/misc_files/p_ligand.flags"
