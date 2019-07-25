@@ -41,9 +41,13 @@ def get_bb_hbonds(pose):
     hbond_set = build_hbond_set(pose)
 
     return [
-        exclude_self_and_non_bb_hbonds(
-            hbond_to_residue(pose, resnum, hbond_set=hbond_set, vec=False),
-            *acceptor_atoms,
+        (
+            # Get all the hbonds
+            atom_i,
+            exclude_self_and_non_bb_hbonds(
+                hbond_to_residue(pose, resnum, hbond_set=hbond_set, vec=False),
+                *acceptor_atoms,
+            ),
         )
         # And a dict of acceptable acceptor atoms (atoms bound to P)
         # keys are p atoms, values are lists of bound atoms
@@ -95,101 +99,48 @@ def minimal_fragments_by_contact_number(pose, min_contacts=1, append_factor=0):
     ]
 
 
-def minimal_fragments_by_secondary_structure(
-    pose,
-    *struct_types,
-    min_contacts=1,
-    proximity=5,
-    lazy=False,
-    append_factor=0,
+def minimal_fragments_by_secondary_structure(pose):
+    """
+    """
+
+
+ploop_flags_file = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/initial_testing/misc_files/p_ligand.flags"
+run_pyrosetta_with_flags(ploop_flags_file)
+# get pose
+pose = pyrosetta.pose_from_pdb(sys.argv[1])
+# get_outdir
+outdir = sys.argv[2]
+name = pose.pdb_info().name().split("/")[-1].split(".pdb")[0]
+# Scan pose for phosphorus containing residues
+# extract hbonds to these residues where:
+# vec False to use list rather than rosetta vector
+
+
+# no support for different append/prepend values
+append_factor = 3  # +- 0-3 residues
+
+
+num_contacts = int(sys.argv[3])
+
+pose_size = len(pose.residues)
+
+
+# Extract contiguous loops with these contacts:
+#   - for each bb pair, check if intervening sequence is under 10 res
+#   - prepend and apppend +- 3 residues on each side if they exist
+
+for d in minimal_fragments_by_contact_number(
+    pose, min_contacts=num_contacts, append_factor=append_factor
 ):
-    """
-    returns fragments with adjacent secondary structure to contacts
-    """
-    bb_hbonds = get_bb_hbonds(pose)
-    pose_size = len(pose.residues)
-    contacts = [
-        (r, min(*contact_set), max(*contact_set))
-        for hbonds in bb_hbonds
-        for r in [get_acceptor_res_for_hbond_collection(hbonds)]
-        if len(hbonds) >= min_contacts
-        for contact_set in it.combinations(
-            [bond.don_res() for bond in hbonds], min_contacts
-        )
-        if max(*contact_set) - min(*contact_set) < 11
-        if min(*contact_set) > 1 and max(*contact_set) < pose_size
-    ]
 
-    struct_list = parse_structure_from_dssp(pose, *struct_types)
-    sec_struct_by_start_pos = {
-        struct.start_pos: struct for struct in struct_list
-    }
-    sec_struct_by_end_pos = {struct.end_pos: struct for struct in struct_list}
-
-    out_list = list()
-
-    for resnum, start_contact, end_contact in contacts:
-        end_struct = int()
-        for i in range(end_contact, end_contact + proximity + 1):
-            if i in sec_struct_by_start_pos:
-                end_struct = sec_struct_by_start_pos[i].end_pos
-                if lazy:
-                    break
-        if not end_struct:
-            end_struct = min(end_contact + append_factor, pose_size)
-        start_struct = int()
-        for i in range(start_contact, start_contact - proximity - 1, -1):
-            if i in sec_struct_by_end_pos:
-                start_struct = sec_struct_by_end_pos[i].start_pos
-                if lazy:
-                    break
-        if not start_struct:
-            start_struct = max(start_contact - append_factor, 1)
-        out_list.append(
-            {"acceptor_res": resnum, "start": start_struct, "end": end_struct}
-        )
-    return out_list
-
-
-def main():
-    ploop_flags_file = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/initial_testing/misc_files/p_ligand.flags"
-    run_pyrosetta_with_flags(ploop_flags_file)
-    # get pose
-    pose = pyrosetta.pose_from_pdb(sys.argv[1])
-    # get_outdir
-    outdir = sys.argv[2]
-    name = pose.pdb_info().name().split("/")[-1].split(".pdb")[0]
-    # Scan pose for phosphorus containing residues
-    # extract hbonds to these residues where:
-    # vec False to use list rather than rosetta vector
-
-    # no support for different append/prepend values
-    append_factor = 3  # +- 0-3 residues
-
-    num_contacts = int(sys.argv[3])
-
-    # Extract contiguous loops with these contacts:
-    #   - for each bb pair, check if intervening sequence is under 10 res
-    #   - prepend and apppend +- 3 residues on each side if they exist
-
-    for d in minimal_fragments_by_contact_number(
-        pose, min_contacts=num_contacts, append_factor=append_factor
-    ):
-
-        r = d["acceptor_res"]
-        s = d["start"]
-        e = d["end"]
-        p = link_poses(
-            pyrosetta.rosetta.protocols.grafting.return_region(
-                pose.clone(), r, r
-            ),
-            pyrosetta.rosetta.protocols.grafting.return_region(pose, s, e),
-            rechain=True,
-        )
-        p.dump_pdb(
-            f"{outdir}/{name}_{num_contacts}-contacts_phos-{r}_frag_{s}-{e}.pdb"
-        )
-
-
-if __name__ == "__main__":
-    main()
+    r = d["acceptor_res"]
+    s = d["start"]
+    e = d["end"]
+    p = link_poses(
+        pyrosetta.rosetta.protocols.grafting.return_region(pose.clone(), r, r),
+        pyrosetta.rosetta.protocols.grafting.return_region(pose, s, e),
+        rechain=True,
+    )
+    p.dump_pdb(
+        f"{outdir}/{name}_{num_contacts}-contacts_phos-{r}_frag_{s}-{e}.pdb"
+    )
