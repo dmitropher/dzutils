@@ -1,11 +1,10 @@
-from itertools import permutations, combinations
+from itertools import permutations, combinations,product
 import numpy as _np
 import pyrosetta as _pyrosetta
 from xbin import XformBinner as _xb
 
 from dzutils.pyrosetta_utils.geometry.pose_xforms import (
     get_e2e_xform,
-    # get_func_to_end,
     generate_pose_rt_between_res,
 )
 
@@ -19,8 +18,12 @@ from dzutils.pyrosetta_utils import (
     atom_indices_with_element,
     bonded_atoms,
     or_compose_residue_selectors,
+    build_hbond_set,
 )
 from dzutils.pyrosetta_utils.secstruct import parse_structure_from_dssp
+
+from dzutils.pyrosetta_utils.chain_utils import link_poses
+
 
 
 def rt_list_hbond_to_res(pose, resnum, sidechain=False, minimal=False):
@@ -239,3 +242,146 @@ def replace_p_res_with_phosphate(pose, min_contacts=0):
     for phos in phosphates:
         _pyrosetta.rosetta.core.pose.append_pose_to_pose(newp, phos, True)
     return newp
+
+
+
+
+
+def phos_bonded_atoms_by_index(residue):
+    """
+    returns a dict with P atom index : [list of bonded atoms] for each P atom
+    """
+    return {
+        atom_i: bonded_atoms(residue, atom_i, name=False)
+        for atom_i in atom_indices_with_element(residue, "P")
+    }
+
+
+def exclude_self_and_non_bb_hbonds(hbond_collection, *acceptor_atoms):
+    return [
+        b
+        for b in hbond_collection
+        if b.acc_atm() in acceptor_atoms
+        and b.don_hatm_is_protein_backbone()
+        and b.don_res() != b.acc_res()
+    ]
+
+
+def get_bb_hbonds(pose):
+
+    hbond_set = build_hbond_set(pose)
+
+    return [
+            exclude_self_and_non_bb_hbonds(
+                hbond_to_residue(pose, resnum, hbond_set=hbond_set, vec=False),
+                *acceptor_atoms,
+            
+        )
+        # And a dict of acceptable acceptor atoms (atoms bound to P)
+        # keys are p atoms, values are lists of bound atoms
+        for resnum in residues_with_element(pose, "P")
+        for atom_i, acceptor_atoms in phos_bonded_atoms_by_index(
+            pose.residue(resnum)
+        ).items()
+    ]
+
+
+def get_acceptor_res_for_hbond_collection(hbond_collection):
+    """
+    Meant to make sure that hbonds have been assigned to atom indices sanely
+    """
+    acceptor_res = list(set([hbond.acc_res() for hbond in hbond_collection]))
+    assert len(acceptor_res) == 1, f"An error occured in hbond collection. {len(acceptor_res) } acceptors found in set"
+    return acceptor_res[0]
+
+
+def minimal_fragments_by_contact_number(pose, min_contacts=1, append_factor=0):
+    """
+    Returns fragment dict with acceptor res and the span between donor residues
+
+    append factor determines number of additional residues appended/prepended
+
+    """
+
+    hbond_collection = get_bb_hbonds(pose)
+
+    pose_size = len(pose.residues)
+
+    append_ranges = [range(append_factor + 1)] * 2
+    return [
+        {
+            "acceptor_res": r,
+            "start": min(*contact_set) - x,
+            "end": max(*contact_set) + y,
+        }
+        for hbonds in hbond_collection
+        for r in [get_acceptor_res_for_hbond_collection(hbonds),]
+        if len(hbonds) >= min_contacts
+        for contact_set in combinations(
+            [bond.don_res() for bond in hbonds], min_contacts
+        )
+        for x, y in product(*append_ranges)
+        if max(*contact_set) - min(*contact_set) + abs(x + y) < 11
+        if min(*contact_set) - x > 1 and max(*contact_set) + y < pose_size
+        if min(*contact_set) - x > r or r > max(*contact_set) + y
+    ]
+
+
+def minimal_fragments_by_secondary_structure(
+    pose, *struct_types, min_contacts=1, proximity=5,lazy=False, append_factor=0
+):
+    """
+    returns fragments with adjacent secondary structure to contacts
+
+    struct types are dssp string names of structure
+
+    blank struct_types gives all
+    """
+    bb_hbonds = get_bb_hbonds(pose)
+
+    pose_size = len(pose.residues)
+    contacts = [
+        (r, min(*contact_set), max(*contact_set))
+        for hbonds in bb_hbonds
+        for r in [get_acceptor_res_for_hbond_collection(hbonds)]
+        if len(hbonds) >= min_contacts
+        for contact_set in combinations(
+            [bond.don_res() for bond in hbonds], min_contacts
+        )
+        if max(*contact_set) - min(*contact_set) < 11
+        if min(*contact_set) > 1 and max(*contact_set) < pose_size
+    ]
+
+    struct_list = parse_structure_from_dssp(pose, *struct_types)
+    sec_struct_by_start_pos = {
+        struct.start_pos: struct for struct in struct_list
+    }
+    sec_struct_by_end_pos = {struct.end_pos: struct for struct in struct_list}
+
+    out_list = list()
+
+    for resnum, start_contact, end_contact in contacts:
+        end_struct = int()
+        for i in range(end_contact, end_contact + proximity + 1):
+            if i in sec_struct_by_start_pos:
+                end_struct = sec_struct_by_start_pos[i].end_pos
+                if lazy:
+                    break
+        if not end_struct:
+            end_struct = min (end_contact + append_factor , pose_size)
+        start_struct = int()
+        for i in range(start_contact, start_contact - proximity - 1, -1):
+            if i in sec_struct_by_end_pos:
+                start_struct = sec_struct_by_end_pos[i].start_pos
+                if lazy:
+                    break
+        if not start_struct:
+            start_struct = max(start_contact - append_factor,1) 
+        out_list.append(
+            {
+                "acceptor_res": resnum,
+                "start": start_struct,
+                "end": end_struct,
+            }
+        )
+    return out_list
