@@ -22,6 +22,8 @@ from dzutils.pyrosetta_utils import (
 )
 from dzutils.pyrosetta_utils.secstruct import parse_structure_from_dssp
 
+from dzutils.pyrosetta_utils.chain_utils import link_poses
+
 
 def rt_list_hbond_to_res(pose, resnum, sidechain=False, minimal=False):
     """
@@ -148,7 +150,6 @@ def loops_to_rt_dict(pose, plus=0, minus=0):
         for i, j in permutations(loop.resnum_list(), 2)
         if i < j
         if i != 1
-
         for start, end in [
             (
                 loop.resnum_list(upstream=minus, downstream=plus)[0],
