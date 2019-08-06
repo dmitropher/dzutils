@@ -41,13 +41,10 @@ def get_bb_hbonds(pose):
     hbond_set = build_hbond_set(pose)
 
     return [
-        (
-            # Get all the hbonds
-            atom_i,
             exclude_self_and_non_bb_hbonds(
                 hbond_to_residue(pose, resnum, hbond_set=hbond_set, vec=False),
                 *acceptor_atoms,
-            ),
+            
         )
         # And a dict of acceptable acceptor atoms (atoms bound to P)
         # keys are p atoms, values are lists of bound atoms
@@ -87,7 +84,7 @@ def minimal_fragments_by_contact_number(pose, min_contacts=1, append_factor=0):
             "end": max(*contact_set) + y,
         }
         for hbonds in hbond_collection
-        for r in [get_acceptor_res_for_hbond_collection(hbonds)]
+        for r in [get_acceptor_res_for_hbond_collection(hbonds),]
         if len(hbonds) >= min_contacts
         for contact_set in it.combinations(
             [bond.don_res() for bond in hbonds], min_contacts
@@ -100,13 +97,13 @@ def minimal_fragments_by_contact_number(pose, min_contacts=1, append_factor=0):
 
 
 def minimal_fragments_by_secondary_structure(
-    pose, *struct_types, min_contacts=1, proximity=5
+    pose, *struct_types, min_contacts=1, proximity=5,lazy=False, append_factor=0
 ):
     """
     returns fragments with adjacent secondary structure to contacts
     """
     bb_hbonds = get_bb_hbonds(pose)
-
+    pose_size = len(pose.residues)
     contacts = [
         (r, min(*contact_set), max(*contact_set))
         for hbonds in bb_hbonds
@@ -130,18 +127,20 @@ def minimal_fragments_by_secondary_structure(
     for resnum, start_contact, end_contact in contacts:
         end_struct = int()
         for i in range(end_contact, end_contact + proximity + 1):
-            if i in sec_struct_by_end_pos:
-                end_struct = sec_struct_by_end_pos[i].end_pos
-                break
+            if i in sec_struct_by_start_pos:
+                end_struct = sec_struct_by_start_pos[i].end_pos
+                if lazy:
+                    break
         if not end_struct:
-            end_struct = end_contact
+            end_struct = min (end_contact + append_factor , pose_size)
         start_struct = int()
         for i in range(start_contact, start_contact - proximity - 1, -1):
             if i in sec_struct_by_end_pos:
-                start_struct = sec_struct_by_start_pos[i].start_pos
-                break
+                start_struct = sec_struct_by_end_pos[i].start_pos
+                if lazy:
+                    break
         if not start_struct:
-            start_struct = start_contact
+            start_struct = max(start_contact - append_factor,1) 
         out_list.append(
             {
                 "acceptor_res": resnum,
@@ -170,8 +169,6 @@ def main ():
 
 
     num_contacts = int(sys.argv[3])
-
-    pose_size = len(pose.residues)
 
 
     # Extract contiguous loops with these contacts:
