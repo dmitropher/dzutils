@@ -12,7 +12,7 @@ from dzutils.sutils import read_flag_file
 # from dzutils.pdb_file_utils import pdb_files_in_dir
 
 
-ploop_flags_file = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/initial_testing/misc_files/p_ligand_debug.flags"
+ploop_flags_file = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/initial_testing/misc_files/p_ligand_quiet.flags"
 flags = read_flag_file(ploop_flags_file)
 flags_str = " ".join(flags.replace("\n", " ").split())
 pyrosetta.init(flags_str)
@@ -89,6 +89,6 @@ for i, p in enumerate(poses, 1):
         p.pdb_info().add_reslabel(n_term, "c_spinnable")
 
     base_name_old = pose.pdb_info().name().split("/")[-1].split(".pdb")[0]
-    new_name = f"{base_name_old}_p{i}_spinnable.pdb"
+    new_name = f"{base_name_old}_p{i}_single_phos.pdb"
     new_out_path = f"{out_path}/{new_name}"
     phos_pose.dump_pdb(new_out_path)
