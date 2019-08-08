@@ -4,6 +4,7 @@ from dzutils.pyrosetta_utils.geometry.rt_utils import (
     stub_from_residue as _stub_from_residue,
 )
 from pyrosetta.rosetta.numeric import xyzVector_double_t, xyzMatrix_double_t
+from pyrosetta.rosetta.core.kinematics import Stub
 
 
 def homog_from_four_points(center, a, b, c):
@@ -155,6 +156,32 @@ def superimpose_stub_by_rt(stub1, stub2, rt):
     return super_from_rt(
         stub_to_homog(stub1), stub_to_homog(stub2), rt_to_homog(rt)
     )
+
+
+def stub_from_3_CA(pose, ca_num):
+    """
+    Returns a rosetta stub from CA i to i +2 (CA stub)
+
+    Does not check that the res has a CA
+    """
+    assert len(pose.residues) < ca_num + 3, "Pose ends before ca_num + 2"
+    targ_stub = Stub()
+    targ_stub.from_four_points(
+        *[
+            pose.residue(num).xyz("CA")
+            for num in [ca_num + 1, *range(ca_num, ca_num + 3)]
+        ]
+    )
+    return targ_stub
+
+
+def homog_from_3_CA(pose, ca_num):
+    """
+    Returns a homogeneous xform from CA i to i +2 (CA stub)
+
+    Does not check that the res has a CA
+    """
+    return stub_to_homog(stub_from_3_CA(pose, ca_num))
 
 
 def xform_magnitude(xform, radius_of_gyration=None):
