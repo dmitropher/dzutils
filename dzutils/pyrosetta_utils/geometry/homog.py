@@ -23,22 +23,6 @@ def homog_from_four_points(center, a, b, c):
     return homog
 
 
-def homog_from_four_points(center, a, b, c):
-    """
-    Returns a homogenous xform analogous to a rosetta stub
-    """
-    p1 = a - b
-    e1 = p1 / _numpy.linalg.norm(p1)
-    p3 = _numpy.cross(e1, (c - b))
-    e3 = p3 / _numpy.linalg.norm(p3)
-    e2 = _numpy.cross(e3, e1)
-    homog = _numpy.empty([4, 4])
-    homog[..., :3, :3] = _numpy.transpose(_numpy.array([e1, e2, e3]))
-    homog[:3, 3] = center
-    homog[..., 3, :] = [0, 0, 0, 1]
-    return homog
-
-
 def np_rot_trans_to_homog(rotation, translation):
     """
     Basic wrapper to turn 3x3 and 1x3 to 4x4 homog xform
