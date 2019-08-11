@@ -30,43 +30,33 @@ from dzutils.pyrosetta_utils.geometry.superposition_utilities import (
 # from dzutils.pyrosetta_utils.chain_utils import insert_pose
 
 
-def super_and_insert_pose(
-    start, end, pose, insertion, insertion_start, insert_chain=0
-):
-    """
-    By default, inserts the whole pose as inflexible insert_chain
-
-    If an insert chain is given, that chain is inserted as an inflexible insert,
-    the rest go in as chains.
-    """
+def super_and_insert_pose(start, end, pose, insertion, insertion_start):
     moved_insertion = super_by_residues(
         insertion, pose, insertion_start, start
     )
     newp = pyrosetta.rosetta.core.pose.Pose()
     newp.detached_copy(pose)
-
+    # pyrosetta.rosetta.core.pose.remove_variant_type_from_pose_residue(
+    #     moved_insertion,
+    #     pyrosetta.rosetta.core.chemical.LOWER_TERMINUS_VARIANT,
+    #     1,
+    # )
+    # pyrosetta.rosetta.core.pose.remove_variant_type_from_pose_residue(
+    #     moved_insertion,
+    #     pyrosetta.rosetta.core.chemical.UPPER_TERMINUS_VARIANT,
+    #     len(moved_insertion.residues),
+    # )
     pyrosetta.rosetta.protocols.grafting.delete_region(newp, start, end)  # - 1
-
+    # newp.dump_pdb("/home/dzorine/temp/trimmed_before_insert.pdb")
     print(start, end)
-
+    # print(moved_insertion)
+    # print(newp)
     pyrosetta.rosetta.core.pose.remove_variant_type_from_pose_residue(
         newp, pyrosetta.rosetta.core.chemical.UPPER_TERMINUS_VARIANT, start - 1
     )
-    if insert_chain:
-        chains = moved_insertion.split_by_chain()
-        chain = chains[insert_chain]
-        out_pose = pyrosetta.rosetta.protocols.grafting.insert_pose_into_pose(
-            newp, chain, start - 1, start, False
-        )
-        for i, c in enumerate(chains, 1):
-            if i != insert_chain:
-                pyrosetta.rosetta.core.pose.append_pose_to_pose(
-                    out_pose, c, True
-                )
-    else:
-        out_pose = pyrosetta.rosetta.protocols.grafting.insert_pose_into_pose(
-            newp, moved_insertion, start - 1, start, False
-        )
+    out_pose = pyrosetta.rosetta.protocols.grafting.insert_pose_into_pose(
+        newp, moved_insertion, start - 1, start, False
+    )
     # out_pose = insert_pose(newp, moved_insertion, start - 1)
     return out_pose
 
@@ -107,7 +97,7 @@ def replace_res_from_pose(pose, replacement, index, replacement_index):
 
 
 def graft_and_dump_pdb(
-    pose, insertion, start, end, insertion_start, dump_path, insert_chain=0
+    pose, insertion, start, end, insertion_start, dump_path
 ):
     """
     """
