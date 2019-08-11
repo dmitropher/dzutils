@@ -199,17 +199,20 @@ def parse_structure_from_dssp(pose, *dssp_types):
 
     dssp_dicts = [
         {
-            "pose": chain,
             "dssp_string": _pyr.core.scoring.dssp.Dssp(
                 chain
             ).get_dssp_secstruct(),
+            "chain_num": i,
         }
-        for chain in pose.split_by_chain()
+        for i, chain in enumerate(pose.split_by_chain(), 1)
     ]
     creator = get_container_creator()
     return [
         creator.get_container(
-            dssp_dict["pose"], run[0], run[-1], str(res_type_string)
+            pose,
+            run[0] + pose.chain_begin(dssp_dict["chain_num"]),
+            run[-1] + pose.chain_begin(dssp_dict["chain_num"]),
+            str(res_type_string),
         )
         for dssp_dict in dssp_dicts
         for res_type_string, iterator in _gb(
