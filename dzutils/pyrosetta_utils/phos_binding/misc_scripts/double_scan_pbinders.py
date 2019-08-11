@@ -12,15 +12,99 @@ from getpy import Dict as GDict
 import numpy as np
 
 
-from xbin import XformBinner as xb
+from xbin import XformBinner as XB
 
 
 from dzutils.sutils import read_flag_file
 from dzutils.pyrosetta_utils.phos_binding import loops_to_rt_dict
+from dzutils.pyrosetta_utils.secstruct.structure import (
+    parse_structure_from_dssp,
+)
 
 from dzutils.pyrosetta_utils.geometry.pose_xforms import (
     generate_pose_rt_between_res,
 )
+
+
+def pairs_in_range(
+    begin,
+    end,
+    min_size,
+    max_size,
+    max_dist_from_begin=-1,
+    max_dist_from_end=-1,
+):
+    """
+    gives all value pairs between begin/end, with appropriate size and offset
+    """
+    max_begin_position = (
+        end - min_size
+        if max_dist_from_begin == -1
+        else begin + max_dist_from_begin
+    )
+    min_end_position = (
+        begin + min_size
+        if max_dist_from_end == -1
+        else end - max_dist_from_end
+    )
+    pairs = [
+        (start, start + val)
+        for start in range(begin, max_begin_position + 1)
+        for val in range(min_size, max_size + 1)
+        if start + val >= min_end_position and start + val <= end
+    ]
+    print(pairs)
+    return pairs
+
+
+def bb_hash_res_pair(pose, res_1, res_2, *xbin_args, **xbin_kwargs):
+    """
+    """
+    binner = XB(*xbin_args, **xbin_kwargs)
+    return binner.get_bin_index(
+        generate_pose_rt_between_res(pose, res_1, res_2)
+    )
+
+
+def pose_fragments_to_pose_xforms(
+    pose,
+    dssp_types,
+    min_size,
+    max_size,
+    *xbin_args,
+    plus=0,
+    minus=0,
+    max_dist_from_begin=-1,
+    max_dist_from_end=-1,
+    **xbin_kwargs,
+):
+    """
+    Gives the pose_xform objects for all res pairs in fragments from dssp_types
+
+    Must specify min and max size for residues between beginning and end of each
+    RT.
+
+    Optional inputs:
+
+    plus or minus range to check around each fragment found by dssp (useful for
+    finding residues anchoring loops)
+
+    xbin arguments to tune the binning
+
+    max distance from beginning and end where a fragment can lie (default any)
+    """
+    return [
+        generate_pose_rt_between_res(pose, i, j)
+        for frag in parse_structure_from_dssp(pose, dssp_types)
+        for i, j in pairs_in_range(
+            max(1, frag.start_pos - minus),
+            min(len(pose.residues), frag.end_pos - plus),
+            min_size,
+            max_size,
+            max_dist_from_begin=max_dist_from_begin,
+            max_dist_from_end=max_dist_from_end,
+        )
+    ]
 
 
 def load_table_and_dict(table_path, dict_path, key_type, value_type):
@@ -31,6 +115,67 @@ def load_table_and_dict(table_path, dict_path, key_type, value_type):
     gp_dict.load(dict_path)
     table = pd.read_json(table_path)
     return table, gp_dict
+
+
+def scan_for_n_term_helical_grafts(
+    pose,
+    frag_table_path,
+    frag_dict_path,
+    *xbin_args,
+    frag_key_type=np.dtype("i8"),
+    frag_value_type=np.dtype("i8"),
+    fragment_size_min=4,
+    fragment_size_max=10,
+    allowed_offset=4,
+    **xbin_kwargs,
+):
+    """
+
+    """
+    pose_xforms = pose_fragments_to_pose_xforms(
+        pose,
+        "H",
+        fragment_size_min,
+        fragment_size_max,
+        *xbin_args,
+        plus=0,
+        minus=0,
+        max_dist_from_begin=allowed_offset,
+        max_dist_from_end=-1,
+        **xbin_kwargs,
+    )
+    binner = XB(*xbin_args, **xbin_kwargs)
+    rt_dicts = [
+        {
+            "rt": np.array(xform),
+            "name": xform.pose_start.pdb_info().name(),
+            "start_res": xform.seqpos_start,
+            "end_res": xform.seqpos_end,
+            "key": binner.get_bin_index(np.array(xform)),
+        }
+        for xform in pose_xforms
+    ]
+    if not rt_dicts:
+        print("empty rt dicts")
+        return
+    pdf = pd.DataFrame(rt_dicts)
+    frag_table, frag_dict = load_table_and_dict(
+        frag_table_path, frag_dict_path, frag_key_type, frag_value_type
+    )
+    mask = frag_dict.contains(np.array(pdf["key"]))
+    masked_df = pdf[mask]
+    if len(masked_df.index) == 0:
+        print("no fragment grafts found")
+        return
+
+    masked_df.loc[:, "e2e_inds"] = frag_dict[np.array(masked_df["key"])]
+    results = masked_df.loc[~masked_df.index.duplicated(keep="first")]
+
+    for col in frag_table:
+        results[f"frag_{col}"] = results["e2e_inds"].map(
+            lambda index: frag_table[frag_table["index"] == index][col].item()
+        )
+    return results
 
 
 def scan_for_ploop_graft(
@@ -58,8 +203,8 @@ def scan_for_ploop_graft(
         print("empty rt dicts")
         return
     pdf = pd.DataFrame(rt_dicts)
-    # binner = xb()
-    pdf["key"] = pdf["rt"].apply(lambda x: xb().get_bin_index(x))
+    # binner = XB()
+    pdf["key"] = pdf["rt"].apply(lambda x: XB().get_bin_index(x))
 
     # FIXME
     # allowed res is all res in this case
@@ -109,7 +254,7 @@ def scan_for_inv_rot(
     )
 
     # generate the keys for inverse rotamer
-    binner = xb()
+    binner = XB()
     results["inv_rot_key"] = results.apply(
         lambda row: binner.get_bin_index(
             row["loop_func_to_bb_start"]
@@ -166,8 +311,8 @@ def main():
         print("empty rt dicts")
         return
     pdf = pd.DataFrame(rt_dicts)
-    binner = xb()
-    pdf["key"] = pdf["rt"].apply(lambda x: xb().get_bin_index(x))
+    binner = XB()
+    pdf["key"] = pdf["rt"].apply(lambda x: XB().get_bin_index(x))
     # allowed res is all res in this case, why not
     pdf["allowed_res"] = pdf["rt"].apply(
         lambda x: [*range(1, len(pose.residues))]
