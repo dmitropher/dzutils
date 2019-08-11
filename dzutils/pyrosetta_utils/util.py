@@ -1,6 +1,14 @@
+import pyrosetta
 import pyrosetta.rosetta as _pyr
 from pyrosetta import pose_from_file as _from_file
 from dzutils.pdb_file_utils import pdb_files_in_dir as _pfd
+from dzutils.util import read_flag_file
+
+
+def run_pyrosetta_with_flags(flags_file_path):
+    flags = read_flag_file(flags_file_path)
+    flags_str = " ".join(flags.replace("\n", " ").split())
+    pyrosetta.init(flags_str)
 
 
 def residues_by_name(pose, *names, include_res=False):
@@ -186,15 +194,26 @@ def build_hbond_set(
     pose.update_residue_neighbors()
     hbond_set.setup_for_residue_pair_energies(pose, False, False)
     return hbond_set
+<<<<<<< HEAD
 
 
 def hbond_to_residue(pose, resnum, vec=False):
+=======
+
+
+def hbond_to_residue(pose, resnum, hbond_set=None, vec=False):
+>>>>>>> fixed util
     """
     Returns a list of all the hbonding residues to the given residue
 
     vec=True returns a rosetta vector instead (marginally faster)
     """
+<<<<<<< HEAD
     hbond_set = build_hbond_set(pose)
+=======
+    if not hbond_set:
+        hbond_set = build_hbond_set(pose)
+>>>>>>> fixed util
     if vec:
         return hbond_set.residue_hbonds(resnum)
     else:
