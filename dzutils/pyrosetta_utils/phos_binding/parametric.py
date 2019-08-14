@@ -263,7 +263,7 @@ class PyBundleGridSampler(object):
 
         returns each set of helix params as a one-line json, delimited by \n
         """
-        return "\n".join (list(json.dumps(d) for d in self.all_helix_grids()))
+        return "\n".join(list(json.dumps(d) for d in self.all_helix_grids()))
 
 
 def configure_helix(helix, length, **params):

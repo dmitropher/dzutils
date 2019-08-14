@@ -22,8 +22,6 @@ from dzutils.pyrosetta_utils import (
 )
 from dzutils.pyrosetta_utils.secstruct import parse_structure_from_dssp
 
-from dzutils.pyrosetta_utils.chain_utils import link_poses
-
 
 def rt_list_hbond_to_res(pose, resnum, sidechain=False, minimal=False):
     """
