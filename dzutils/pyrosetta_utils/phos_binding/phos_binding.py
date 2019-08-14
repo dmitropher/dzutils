@@ -271,6 +271,32 @@ def exclude_self_and_non_bb_hbonds(hbond_collection, *acceptor_atoms):
     ]
 
 
+def exclude_self_hbonds(hbond_collection, *acceptor_atoms):
+    return [
+        b
+        for b in hbond_collection
+        if b.acc_atm() in acceptor_atoms and b.don_res() != b.acc_res()
+    ]
+
+
+def get_hbonds(pose):
+
+    hbond_set = build_hbond_set(pose)
+
+    return [
+        exclude_self_hbonds(
+            hbond_to_residue(pose, resnum, hbond_set=hbond_set, vec=False),
+            *acceptor_atoms,
+        )
+        # And a dict of acceptable acceptor atoms (atoms bound to P)
+        # keys are p atoms, values are lists of bound atoms
+        for resnum in residues_with_element(pose, "P")
+        for atom_i, acceptor_atoms in phos_bonded_atoms_by_index(
+            pose.residue(resnum)
+        ).items()
+    ]
+
+
 def get_bb_hbonds(pose):
 
     hbond_set = build_hbond_set(pose)
@@ -279,7 +305,7 @@ def get_bb_hbonds(pose):
             exclude_self_and_non_bb_hbonds(
                 hbond_to_residue(pose, resnum, hbond_set=hbond_set, vec=False),
                 *acceptor_atoms,
-            
+
         )
         # And a dict of acceptable acceptor atoms (atoms bound to P)
         # keys are p atoms, values are lists of bound atoms
@@ -332,7 +358,13 @@ def minimal_fragments_by_contact_number(pose, min_contacts=1, append_factor=0):
 
 
 def minimal_fragments_by_secondary_structure(
-    pose, *struct_types, min_contacts=1, proximity=5,lazy=False, append_factor=0
+    pose,
+    *struct_types,
+    min_contacts=1,
+    proximity=5,
+    lazy=False,
+    append_factor=0,
+    sidechain=False,
 ):
     """
     returns fragments with adjacent secondary structure to contacts
@@ -341,7 +373,7 @@ def minimal_fragments_by_secondary_structure(
 
     blank struct_types gives all
     """
-    bb_hbonds = get_bb_hbonds(pose)
+    bb_hbonds = get_bb_hbonds(pose) if not sidechain else get_hbonds(pose)
 
     pose_size = len(pose.residues)
     contacts = [
@@ -380,7 +412,7 @@ def minimal_fragments_by_secondary_structure(
                 if lazy:
                     break
         if not start_struct:
-            start_struct = max(start_contact - append_factor,1) 
+            start_struct = max(start_contact - append_factor,1)
         out_list.append(
             {
                 "acceptor_res": resnum,
