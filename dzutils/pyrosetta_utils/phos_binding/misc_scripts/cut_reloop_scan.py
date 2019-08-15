@@ -27,7 +27,7 @@ from dzutils.pyrosetta_utils.geometry.superposition_utilities import (
     super_by_residues,
 )
 
-# from dzutils.pyrosetta_utils.chain_utils import insert_pose
+from dzutils.pyrosetta_utils.chain_utils import link_poses
 
 
 def super_and_insert_pose(
@@ -47,26 +47,67 @@ def super_and_insert_pose(
 
     pyrosetta.rosetta.protocols.grafting.delete_region(newp, start, end)  # - 1
 
-    print(start, end)
-
-    pyrosetta.rosetta.core.pose.remove_variant_type_from_pose_residue(
-        newp, pyrosetta.rosetta.core.chemical.UPPER_TERMINUS_VARIANT, start - 1
-    )
+    if start != 1:
+        pyrosetta.rosetta.core.pose.remove_variant_type_from_pose_residue(
+            newp,
+            pyrosetta.rosetta.core.chemical.UPPER_TERMINUS_VARIANT,
+            start - 1,
+        )
+    out_pose = pyrosetta.rosetta.core.pose.Pose()
+    # weird hack to patch fold tree bug where you can't reorder a tree with
+    # The edge 1,1,-1
+    res_1 = pyrosetta.rosetta.core.pose.Pose()
+    if start == 2:
+        print("start is res 2")
+        res_1.append_residue_by_bond(newp.residue(1).clone())
+        pyrosetta.rosetta.core.pose.remove_variant_type_from_pose_residue(
+            res_1, pyrosetta.rosetta.core.chemical.UPPER_TERMINUS_VARIANT, 1
+        )
+        newp.delete_residue_slow(1)
+        start = 1
+        end = end - 1
     if insert_chain:
         chains = moved_insertion.split_by_chain()
         chain = chains[insert_chain]
-        out_pose = pyrosetta.rosetta.protocols.grafting.insert_pose_into_pose(
-            newp, chain, start - 1, start, False
-        )
+        if start == 1:
+            out_pose = chain.clone()
+            pyrosetta.rosetta.core.pose.remove_variant_type_from_pose_residue(
+                out_pose,
+                pyrosetta.rosetta.core.chemical.UPPER_TERMINUS_VARIANT,
+                len(out_pose.residues),
+            )
+            pyrosetta.rosetta.core.pose.append_pose_to_pose(
+                out_pose, newp, False
+            )
+            if len(res_1):
+                out_pose = link_poses(res_1, out_pose, rechain=False)
+        else:
+            out_pose = pyrosetta.rosetta.protocols.grafting.insert_pose_into_pose(
+                newp, chain, start - 1, start, False
+            )
         for i, c in enumerate(chains, 1):
             if i != insert_chain:
                 pyrosetta.rosetta.core.pose.append_pose_to_pose(
                     out_pose, c, True
                 )
     else:
-        out_pose = pyrosetta.rosetta.protocols.grafting.insert_pose_into_pose(
-            newp, moved_insertion, start - 1, start, False
-        )
+        if start == 1:
+            out_pose = moved_insertion.clone()
+            pyrosetta.rosetta.core.pose.remove_variant_type_from_pose_residue(
+                out_pose,
+                pyrosetta.rosetta.core.chemical.UPPER_TERMINUS_VARIANT,
+                len(out_pose.residues),
+            )
+            pyrosetta.rosetta.core.pose.append_pose_to_pose(
+                out_pose, newp, False
+            )
+            if len(res_1):
+                out_pose = link_poses(res_1, out_pose, rechain=False)
+        else:
+            out_pose = pyrosetta.rosetta.protocols.grafting.insert_pose_into_pose(
+                newp, moved_insertion, start - 1, start, False
+            )
+
     # out_pose = insert_pose(newp, moved_insertion, start - 1)
     return out_pose
 
