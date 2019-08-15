@@ -53,7 +53,7 @@ def pairs_in_range(
         for val in range(min_size, max_size + 1)
         if start + val >= min_end_position and start + val <= end
     ]
-    print(pairs)
+    # print(pairs)
     return pairs
 
 
@@ -163,7 +163,8 @@ def scan_for_n_term_helical_grafts(
         frag_table_path, frag_dict_path, frag_key_type, frag_value_type
     )
     mask = frag_dict.contains(np.array(pdf["key"]))
-    masked_df = pdf[mask]
+
+    masked_df = pdf[mask].copy()
     if len(masked_df.index) == 0:
         print("no fragment grafts found")
         return

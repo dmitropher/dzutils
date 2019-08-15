@@ -26,6 +26,8 @@ def pose_from_chain(pose, chain):
     """
     return pose.split_by_chain()[chain]
 
+def chain_of(pose,resnum):
+    return [num for num in range(1,pose.num_chains() + 1) if resnum <= pose.chain_end(num) and resnum >= pose.chain_begin(num) ][0]
 
 # this is broken, chain_begin returns the first res of the chain_num
 # def posnum_in_chain(pose, resnum):
