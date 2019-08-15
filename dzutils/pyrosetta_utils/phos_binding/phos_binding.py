@@ -9,7 +9,7 @@ from dzutils.pyrosetta_utils.geometry.pose_xforms import (
 )
 
 from dzutils.pyrosetta_utils.geometry.superposition_utilities import (
-    super_by_paired_atoms,
+    super_by_paired_atoms,super_by_residues
 )
 
 from dzutils.pyrosetta_utils import (
@@ -421,3 +421,98 @@ def minimal_fragments_by_secondary_structure(
             }
         )
     return out_list
+
+
+##### FORGIVE ME FUTURE DMITRI, I'M MOVING THIS STUFF INTO OUR PACKAGE ########
+##### LOVE, PAST DMITRI #####
+
+
+def super_and_insert_pose(
+    start, end, pose, insertion, insertion_start, insert_chain=0
+):
+    """
+    By default, inserts the whole pose as inflexible insert_chain
+
+    If an insert chain is given, that chain is inserted as an inflexible insert,
+    the rest go in as chains.
+    """
+    moved_insertion = super_by_residues(
+        insertion, pose, insertion_start, start
+    )
+    newp = _pyrosetta.rosetta.core.pose.Pose()
+    newp.detached_copy(pose)
+
+    _pyrosetta.rosetta.protocols.grafting.delete_region(newp, start, end)  # - 1
+
+    print(start, end)
+
+    _pyrosetta.rosetta.core.pose.remove_variant_type_from_pose_residue(
+        newp, _pyrosetta.rosetta.core.chemical.UPPER_TERMINUS_VARIANT, start - 1
+    )
+    if insert_chain:
+        chains = moved_insertion.split_by_chain()
+        chain = chains[insert_chain]
+        out_pose = _pyrosetta.rosetta.protocols.grafting.insert_pose_into_pose(
+            newp, chain, start - 1, start, False
+        )
+        for i, c in enumerate(chains, 1):
+            if i != insert_chain:
+                _pyrosetta.rosetta.core.pose.append_pose_to_pose(
+                    out_pose, c, True
+                )
+    else:
+        out_pose = _pyrosetta.rosetta.protocols.grafting.insert_pose_into_pose(
+            newp, moved_insertion, start - 1, start, False
+        )
+    # out_pose = insert_pose(newp, moved_insertion, start - 1)
+    return out_pose
+
+
+def replace_res_from_pose(pose, replacement, index, replacement_index):
+    replacement_copy = replacement.clone()
+    # super_by_residues(replacement_copy,pose,replacement_index,index)
+    _pyrosetta.rosetta.core.pose.remove_variant_type_from_pose_residue(
+        replacement_copy,
+        _pyrosetta.rosetta.core.chemical.UPPER_TERMINUS_VARIANT,
+        replacement_index,
+    )
+    _pyrosetta.rosetta.core.pose.remove_variant_type_from_pose_residue(
+        replacement_copy,
+        _pyrosetta.rosetta.core.chemical.LOWER_TERMINUS_VARIANT,
+        replacement_index,
+    )
+    pose.replace_residue(
+        index, replacement_copy.residue(replacement_index), True
+    )
+    # _pyrosetta.rosetta.core.pose.correctly_add_cutpoint_variants(pose)
+    for num in range(1, pose.num_chains() + 1):
+        if index == pose.chain_begin(num):
+            _pyrosetta.rosetta.core.pose.add_variant_type_to_pose_residue(
+                pose,
+                _pyrosetta.rosetta.core.chemical.LOWER_TERMINUS_VARIANT,
+                index,
+            )
+            pose.conformation().chains_from_termini()
+        if index == pose.chain_end(num):
+            _pyrosetta.rosetta.core.pose.add_variant_type_to_pose_residue(
+                pose,
+                _pyrosetta.rosetta.core.chemical.UPPER_TERMINUS_VARIANT,
+                index,
+            )
+            pose.conformation().chains_from_termini()
+    return pose
+
+
+def graft_and_dump_pdb(
+    pose, insertion, start, end, insertion_start, dump_path, insert_chain=0
+):
+    """
+    """
+    new_pose = super_and_insert_pose(
+        start, end, pose, insertion, insertion_start
+    )
+    new_pose.dump_pdb(dump_path)
+    # del new_pose
+    # if not dumped:
+    #     raise RuntimeError(f"Unable to dump pdb at specfied path: {dump_path}")
+    return dump_path
