@@ -1,6 +1,7 @@
 import sys, json, os
 
 import click
+import numpy as np
 
 import pyrosetta
 
@@ -12,6 +13,7 @@ import pandas as pd
 from dzutils.pyrosetta_utils.phos_binding.misc_scripts.double_scan_pbinders import (
     scan_for_n_term_helical_grafts,
     scan_for_inv_rot,
+    load_table_and_dict,
 )
 
 from dzutils.pyrosetta_utils.phos_binding import (
@@ -119,27 +121,11 @@ def process_secondary_results(
         ),
         axis=1,
     )
-    secondary_results_table.to_json(secondary_write_path)
 
 
-@click.command()
-@click.option("-o", "--out-dir")
-@click.option("-p", "--param-json")
-@click.option(
-    "-f",
-    "--flags-file",
-    default="/home/dzorine/phos_binding/run_files/p_ligand_quiet.flags",
-)
-def main(out_dir, param_json, flags_file):
-
-    table_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/ploop_fragment_set/tables/1ang_3_contact_ploop_set_4_v3.json"
-    dict_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/ploop_fragment_set/dicts/1ang_3_contact_ploop_set_4_v3.bin"
-
-    run_pyrosetta_with_flags(flags_file)
-    param_dict = json.loads(param_json)
-    name_hash = hash(param_json)
-    # param_dict = dict(param_json)
-
+def param_to_pose(param_dict):
+    """
+    """
     params_for_helices = [
         param_dict[str(i)] for i in range(1, param_dict["num_helices"] + 1)
     ]
@@ -152,11 +138,70 @@ def main(out_dir, param_json, flags_file):
     # Empty pose to helical bundle!
     pose = pyrosetta.rosetta.core.pose.Pose()
     bundle_maker.apply(pose)
-    inf = pyrosetta.rosetta.core.pose.PDBInfo(pose)
-    inf.name(f"param_bundle_{name_hash}.pdb")
-    pose.pdb_info(inf)
+    return pose
 
-    if len(pose.residues):
+
+def num_params(param_range_dict):
+    """
+    Takes a PyBundleGridSampler params dict and computes total combinations
+
+    dict must have either range type params or binary and must specify num helix
+    """
+    return np.product(
+        [
+            (
+                dict_["steps"]
+                if dict_["type"] == "range"
+                else ((2 if dict_["allow_others"] else 1))
+            )
+            for val in range(1, param_range_dict["num_helices"] + 1)
+            for dict_ in param_range_dict[val]
+        ]
+    )
+
+
+def subsample_grid(num_chunks, index, **grid_params):
+    """
+    Takes a set of grid params and slices off the given chunk
+    """
+
+
+@click.command()
+@click.option("-o", "--out-dir")
+@click.option("-p", "--param-json")
+@click.option("-i", "--chunk-index")
+@click.option("-c", "--num-chunks")
+@click.option(
+    "-f",
+    "--flags-file",
+    default="/home/dzorine/phos_binding/run_files/p_ligand_quiet.flags",
+)
+def main(out_dir, param_json, flags_file, chunk_index, num_chunks):
+
+    table_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/ploop_fragment_set/tables/1ang_3_contact_ploop_set_4_v3.json"
+    dict_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/ploop_fragment_set/dicts/1ang_3_contact_ploop_set_4_v3.bin"
+    rot_table_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/inverse_rotamer/tables/inverse_ptr_exchi7_rotamers_1ang_v1.json"
+    rot_dict_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/inverse_rotamer/dicts/inverse_ptr_exchi7_rotamers_1ang_v1.bin"
+    frag_table, frag_dict = load_table_and_dict(
+        table_path, dict_path, np.dtype("i8"), np.dtype("i8")
+    )
+    rot_table, rot_dict = load_table_and_dict(
+        rot_table_path, rot_dict_path, np.dtype("i8"), np.dtype("i8")
+    )
+    run_pyrosetta_with_flags(flags_file)
+    grid_dict = json.loads(param_json)
+    sub_grid_dicts = subsample_grid(num_chunks, chunk_index, grid_dict)
+    name_hash = hash(param_json)
+    for param_dict in sub_grid_dicts:
+        # param_dict = dict(param_json)
+
+        pose = param_to_pose(param_dict)
+        inf = pyrosetta.rosetta.core.pose.PDBInfo(pose)
+        inf.name(f"param_bundle_{name_hash}.pdb")
+        pose.pdb_info(inf)
+
+        if not len(pose.residues):
+            continue
         results = scan_for_n_term_helical_grafts(pose, table_path, dict_path)
         results["allowed_res"] = results.apply(
             lambda x: [*range(1, len(pose.residues) + 1)], axis=1
@@ -166,17 +211,11 @@ def main(out_dir, param_json, flags_file):
             index=str,
             columns={"frag_feature_to_start": "loop_func_to_bb_start"},
         )
-        rot_table_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/inverse_rotamer/tables/inverse_ptr_exchi7_rotamers_1ang_v1.json"
-        rot_dict_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/inverse_rotamer/dicts/inverse_ptr_exchi7_rotamers_1ang_v1.bin"
         sec_results = scan_for_inv_rot(
             pose, results, rot_table_path, rot_dict_path
         )
-        if sec_results:
-            # do the grafting
+        if not sec_results is None:
             process_secondary_results(sec_results, pose, out_dir)
-            # dump the pdb and params
-            # update the DataFrame
-            # dump the dataframe
 
 
 if __name__ == "__main__":
