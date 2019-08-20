@@ -213,7 +213,7 @@ class PyBundleGridSampler(object):
         return self._helices[num]
 
     def all_helix_grids(self):
-        return [
+        return (
             {
                 **{
                     "helix_length": self.helix_length,
@@ -222,12 +222,12 @@ class PyBundleGridSampler(object):
                 **dict(prod),
             }
             for prod in product(
-                *[
+                *(
                     product([num], helix.get_grid_dicts())
                     for num, helix in self._helices.items()
-                ]
+                )
             )
-        ]
+        )
 
     def get_json_params(self):
         """
@@ -238,10 +238,38 @@ class PyBundleGridSampler(object):
         """
         return json.dumps(
             {
-                num: helix.get_params_dicts()
-                for num, helix in self._helices.items()
+                **{
+                    "helix_length": self.helix_length,
+                    "num_helices": self.num_helices,
+                },
+                **{
+                    num: helix.get_params_dicts()
+                    for num, helix in self._helices.items()
+                },
             }
         )
+
+    def write_json_params(self, path):
+        """
+        returns the json of a dict with key:val helix_number:[helix param dicts]
+
+        Useful for compactly saving params for a future sampling/generating a
+        "config" type file
+        """
+        with open(path, "w+") as file:
+            json.dump(
+                {
+                    **{
+                        "helix_length": self.helix_length,
+                        "num_helices": self.num_helices,
+                    },
+                    **{
+                        num: helix.get_params_dicts()
+                        for num, helix in self._helices.items()
+                    },
+                },
+                file,
+            )
 
     def get_json_grids(self):
         """
@@ -263,7 +291,22 @@ class PyBundleGridSampler(object):
 
         returns each set of helix params as a one-line json, delimited by \n
         """
-        return "\n".join (list(json.dumps(d) for d in self.all_helix_grids()))
+        return "\n".join(list(json.dumps(d) for d in self.all_helix_grids()))
+
+    def newline_delimited_json_grids_to_file(self, path):
+        """
+        i/o helper function
+
+        particularly nice format to write the dicts to disk if you want to keep
+        them in one file, but load one set of helix params at a time as a
+        cmd line argument to a python script by slicing with GNU head or sthing
+
+        returns each set of helix params as a one-line json, delimited by \n
+        """
+        with open(path, "w+") as f:
+            for grid in self.all_helix_grids():
+                f.write(json.dumps(grid))
+                f.write("\n")
 
 
 def configure_helix(helix, length, **params):

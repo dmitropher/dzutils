@@ -181,7 +181,7 @@ for pose in poses:
         newp,
         dssp_types="H",
         by_chain=1,
-        alignment_atoms=("P1", "P1", "O2", "O3"),
+        alignment_atoms=("P1", "P1", "O1", "O3"),
         residue_name_3="PO4",
     )
     if xform_dicts:
@@ -190,7 +190,7 @@ for pose in poses:
 xform_table = pd.DataFrame(dicts)
 xform_table["index"] = xform_table.index
 print(len(xform_table.index))
-data_name = "1ang_3_contact_ploop_set_4_v3"
+data_name = "1ang_3_contact_ploop_set_4_v4"
 data_store_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/ploop_fragment_set"
 table_out_path = f"{data_store_path}/tables/{data_name}.json"
 assert bool(

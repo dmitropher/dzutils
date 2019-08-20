@@ -265,6 +265,7 @@ def scan_for_inv_rot(
         ),
         axis=1,
     )
+    # print (results)
     # TODO - include the inv rot reference atoms as well as loop func to bb start
 
     # load inv_rot table and dict
@@ -278,6 +279,7 @@ def scan_for_inv_rot(
     # Mask and discard no hit table
     rot_mask = inv_rot_dict.contains(np.array(results["inv_rot_key"]))
     rot_masked_df = results[rot_mask]
+    print(rot_masked_df)
     if len(rot_masked_df.index) == 0:
         print("no secondary hits found")
         return

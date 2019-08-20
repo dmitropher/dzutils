@@ -23,6 +23,15 @@ from dzutils.pyrosetta_utils.chain_utils import chain_of
 from dzutils.pyrosetta_utils import run_pyrosetta_with_flags
 
 
+def trim_frag_to_end(pose, position, chain=1):
+    frag = pose.clone()
+    # data["frag_end"] + 1,
+    frag.delete_residue_range_slow(
+        position, len(frag.split_by_chain()[chain].residues)
+    )
+    return frag
+
+
 def trim_to_graft_start(pose, resnum):
     """
     trims the pose from the chain start of resnum to the residue before
@@ -44,6 +53,8 @@ def process_secondary_results(
     fragment_file_label="frag_filename",
     frag_index_label="frag_index",
     inv_rot_file_label="inv_rot_file",
+    frag_end_label="frag_end",
+    frag_start_label="frag_start",
     table_label="",
     pdb_label="",
 ):
@@ -87,9 +98,10 @@ def process_secondary_results(
                     row[target_res_label],
                     1,
                 ),
-                pyrosetta.pose_from_file(
-                    row[fragment_file_label]
-                ).split_by_chain()[1],
+                trim_frag_to_end(
+                    pyrosetta.pose_from_file(row[fragment_file_label]),
+                    row[frag_end_label] + 1,
+                ),
                 row["start_res"],
                 row["end_res"],
                 1,
@@ -109,7 +121,7 @@ def process_secondary_results(
 
 
 @click.command()
-@click.option("-o", "--outdir")
+@click.option("-o", "--out-dir")
 @click.option("-p", "--param-json")
 @click.option(
     "-f",
@@ -122,12 +134,12 @@ def main(out_dir, param_json, flags_file):
     dict_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/ploop_fragment_set/dicts/1ang_3_contact_ploop_set_4_v3.bin"
 
     run_pyrosetta_with_flags(flags_file)
-    param_json = json.loads(param_json)
+    param_dict = json.loads(param_json)
     name_hash = hash(param_json)
-    param_dict = dict(param_json)
+    # param_dict = dict(param_json)
 
     params_for_helices = [
-        param_dict[i] for i in range(1, param_dict["num_helices"] + 1)
+        param_dict[str(i)] for i in range(1, param_dict["num_helices"] + 1)
     ]
 
     # Use the wrapper to create the MakeBundle Mover
@@ -147,6 +159,7 @@ def main(out_dir, param_json, flags_file):
         results["allowed_res"] = results.apply(
             lambda x: [*range(1, len(pose.residues) + 1)], axis=1
         )
+        results["param_json"] = results.apply(lambda x: param_json, axis=1)
         results = results.rename(
             index=str,
             columns={"frag_feature_to_start": "loop_func_to_bb_start"},
