@@ -229,6 +229,24 @@ class PyBundleGridSampler(object):
             )
         )
 
+    def get_params(self):
+        """
+        returns the dict with key:val helix_number:[helix param dicts]
+
+        Useful for compactly saving params for a future sampling/generating a
+        "config" type file
+        """
+        return {
+            **{
+                "helix_length": self.helix_length,
+                "num_helices": self.num_helices,
+            },
+            **{
+                num: helix.get_params_dicts()
+                for num, helix in self._helices.items()
+            },
+        }
+
     def get_json_params(self):
         """
         returns the json of a dict with key:val helix_number:[helix param dicts]
@@ -236,18 +254,7 @@ class PyBundleGridSampler(object):
         Useful for compactly saving params for a future sampling/generating a
         "config" type file
         """
-        return json.dumps(
-            {
-                **{
-                    "helix_length": self.helix_length,
-                    "num_helices": self.num_helices,
-                },
-                **{
-                    num: helix.get_params_dicts()
-                    for num, helix in self._helices.items()
-                },
-            }
-        )
+        return json.dumps(self.get_params())
 
     def write_json_params(self, path):
         """

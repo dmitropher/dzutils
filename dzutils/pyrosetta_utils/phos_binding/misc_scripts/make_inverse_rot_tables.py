@@ -33,18 +33,19 @@ def dump_residue_as_pdb(residue, path):
 @click.option("-a", "--angle-res", default=15)
 @click.option("-d", "--angstrom-dist-res", default=1)
 @click.option("-r", "--run-name", default="inverse_ptr_exchi7_rotamers")
+@click.option("-e", "--erase/--no-erase", default=False)
 def main(
     run_name="inverse_ptr_exchi7_rotamers",
     res_out_dir="",
     angstrom_dist_res=1,
     angle_res=15,
+    erase=False,
 ):
     pyrosetta.init(
         """-out:level 100
-        -packing:ex1
-        -packing:ex2
-        -packing:ex3
-        -packing:ex4
+        -packing:extrachi_cutoff 0
+        -packing:ex1:level 2
+        -packing:ex2:level 2
 
     """
         # -extra_res_fa /home/dzorine/phos_binding/p_compounds/residues/PTR.params
@@ -101,10 +102,11 @@ def main(
     )
     data_store_path = f"{db_path}/inverse_rotamer/tables"
     data_out_path = f"{data_store_path}/{inv_rot_table.name}.json"
-    assert bool(
-        not (isfile(data_out_path))
-    ), "Table with this name already exists"
-    inv_rot_table.to_json(data_out_path)
+    if not erase:
+        assert bool(
+            not (isfile(data_out_path))
+        ), "Table with this name already exists"
+        inv_rot_table.to_json(data_out_path)
 
     inv_rot_keys = np.array(inv_rot_table["key_int"], dtype=np.int64)
     inv_rot_vals = np.array(inv_rot_table["index"], dtype=np.int64)
@@ -113,9 +115,10 @@ def main(
     gp_dict = gp.Dict(key_type, value_type)
     gp_dict[inv_rot_keys] = inv_rot_vals
     dict_out_path = f"{db_path}/inverse_rotamer/dicts/{data_name}.bin"
-    assert bool(
-        not (isfile(dict_out_path))
-    ), "Dict with this name already exists"
+    if not erase:
+        assert bool(
+            not (isfile(dict_out_path))
+        ), "Dict with this name already exists"
     gp_dict.dump(dict_out_path)
 
 

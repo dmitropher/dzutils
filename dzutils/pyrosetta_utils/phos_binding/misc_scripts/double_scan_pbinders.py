@@ -76,7 +76,6 @@ def pose_fragments_to_pose_xforms(
     minus=0,
     max_dist_from_begin=-1,
     max_dist_from_end=-1,
-    **xbin_kwargs,
 ):
     """
     Gives the pose_xform objects for all res pairs in fragments from dssp_types
@@ -88,8 +87,6 @@ def pose_fragments_to_pose_xforms(
 
     plus or minus range to check around each fragment found by dssp (useful for
     finding residues anchoring loops)
-
-    xbin arguments to tune the binning
 
     max distance from beginning and end where a fragment can lie (default any)
     """
@@ -119,9 +116,11 @@ def load_table_and_dict(table_path, dict_path, key_type, value_type):
 
 def scan_for_n_term_helical_grafts(
     pose,
-    frag_table_path,
-    frag_dict_path,
     *xbin_args,
+    frag_table=None,
+    frag_dict=None,
+    frag_table_path=None,
+    frag_dict_path=None,
     frag_key_type=np.dtype("i8"),
     frag_value_type=np.dtype("i8"),
     fragment_size_min=4,
@@ -132,6 +131,11 @@ def scan_for_n_term_helical_grafts(
     """
 
     """
+    assert bool(
+        (frag_table is not None and frag_dict is not None)
+        ^ (frag_table_path is not None and frag_dict_path is not None)
+    ), "Must specify either a table/dict path or preload table/dict"
+
     pose_xforms = pose_fragments_to_pose_xforms(
         pose,
         "H",
@@ -142,26 +146,27 @@ def scan_for_n_term_helical_grafts(
         minus=0,
         max_dist_from_begin=allowed_offset,
         max_dist_from_end=-1,
-        **xbin_kwargs,
     )
     binner = XB(*xbin_args, **xbin_kwargs)
-    rt_dicts = [
+    xform_key = zip(pose_xforms, binner.get_bin_index(np.array(pose_xforms)))
+    rt_dicts = (
         {
             "rt": np.array(xform),
             "name": xform.pose_start.pdb_info().name(),
             "start_res": xform.seqpos_start,
             "end_res": xform.seqpos_end,
-            "key": binner.get_bin_index(np.array(xform)),
+            "key": key,
         }
-        for xform in pose_xforms
-    ]
+        for xform, key in xform_key
+    )
     if not rt_dicts:
         print("empty rt dicts")
         return
     pdf = pd.DataFrame(rt_dicts)
-    frag_table, frag_dict = load_table_and_dict(
-        frag_table_path, frag_dict_path, frag_key_type, frag_value_type
-    )
+    if frag_table is None and frag_dict is None:
+        frag_table, frag_dict = load_table_and_dict(
+            frag_table_path, frag_dict_path, frag_key_type, frag_value_type
+        )
     mask = frag_dict.contains(np.array(pdf["key"]))
 
     masked_df = pdf[mask].copy()
@@ -173,7 +178,8 @@ def scan_for_n_term_helical_grafts(
     results = masked_df.loc[~masked_df.index.duplicated(keep="first")]
 
     for col in frag_table:
-        results[f"frag_{col}"] = results["e2e_inds"].map(
+        col_name = f"frag_{col}"
+        results[col_name] = results["e2e_inds"].map(
             lambda index: frag_table[frag_table["index"] == index][col].item()
         )
     return results
@@ -238,12 +244,18 @@ def scan_for_ploop_graft(
 def scan_for_inv_rot(
     pose,
     primary_results_table,
-    inv_rot_table_path,
-    inv_rot_dict_path,
+    inv_rot_table=None,
+    inv_rot_dict=None,
+    inv_rot_table_path=None,
+    inv_rot_dict_path=None,
+    feature_xform_label="loop_func_to_bb_start",
     inv_rot_key_type=np.dtype("i8"),
     inv_rot_value_type=np.dtype("i8"),
 ):
-
+    assert bool(
+        (inv_rot_table is not None and inv_rot_dict is not None)
+        ^ (inv_rot_table_path is not None and inv_rot_dict_path is not None)
+    ), "Must specify either a table/dict path or preload table/dict"
     results = primary_results_table
 
     # split each allowed res into its own row
@@ -256,32 +268,48 @@ def scan_for_inv_rot(
 
     # generate the keys for inverse rotamer
     binner = XB()
-    results["inv_rot_key"] = results.apply(
+    working = pose.clone()
+    start_to_end_xforms = np.array(
+        [
+            generate_pose_rt_between_res(working, start, target)
+            for start, target in zip(
+                results["start_res"].to_list(),
+                results["p_res_target"].to_list(),
+            )
+        ]
+    )
+    feature_to_start_xforms = np.array(results[feature_xform_label].to_list())
+    # print (feature_to_start_xforms,start_to_end_xforms,sep="\n")
+    keys = binner.get_bin_index(
+        np.array(feature_to_start_xforms @ start_to_end_xforms)
+    )
+    key_series = pd.Series(keys)
+    results["inv_rot_key"] = key_series
+    """results.apply(
         lambda row: binner.get_bin_index(
-            row["loop_func_to_bb_start"]
+            row[feature_xform_label]
             @ generate_pose_rt_between_res(
                 pose.clone(), row["start_res"], row["p_res_target"]
             )
         ),
         axis=1,
-    )
+    )"""
     # print (results)
     # TODO - include the inv rot reference atoms as well as loop func to bb start
 
     # load inv_rot table and dict
-    inv_rot_table, inv_rot_dict = load_table_and_dict(
-        inv_rot_table_path,
-        inv_rot_dict_path,
-        inv_rot_key_type,
-        inv_rot_value_type,
-    )
+    if inv_rot_table is None and inv_rot_dict is None:
+        inv_rot_table, inv_rot_dict = load_table_and_dict(
+            inv_rot_table_path,
+            inv_rot_dict_path,
+            inv_rot_key_type,
+            inv_rot_value_type,
+        )
 
     # Mask and discard no hit table
     rot_mask = inv_rot_dict.contains(np.array(results["inv_rot_key"]))
     rot_masked_df = results[rot_mask]
-    print(rot_masked_df)
     if len(rot_masked_df.index) == 0:
-        print("no secondary hits found")
         return
 
     # retrieve rotamers from table
