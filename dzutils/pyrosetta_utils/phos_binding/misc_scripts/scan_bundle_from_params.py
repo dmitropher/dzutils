@@ -24,6 +24,8 @@ from dzutils.pyrosetta_utils.chain_utils import chain_of
 
 from dzutils.pyrosetta_utils import run_pyrosetta_with_flags
 
+from dzutils.func_utils import index_to_parameters
+
 
 def trim_frag_to_end(pose, position, chain=1):
     frag = pose.clone()
@@ -160,10 +162,59 @@ def num_params(param_range_dict):
     )
 
 
-def subsample_grid(num_chunks, index, **grid_params):
+def subsample_grid(num_chunks, index, **param_range_dict):
     """
     Takes a set of grid params and slices off the given chunk
     """
+    big = num_params(param_range_dict)
+    binnable = big - (big % (num_chunks - 1))
+    bin_size = int(binnable / (num_chunks - 1))
+    indices = (
+        list(
+            range(
+                bin_size * index + 1, min(bin_size * (index + 1) + 1, big + 1)
+            )
+        )
+        if bin_size > 1
+        else [index]
+    )
+    param_tuples = [
+        (
+            (dict_["start"], dict_["stop"], dict_["steps"])
+            if dict_["type"] == "range"
+            else (
+                int(dict_["base_value"]),
+                (
+                    int(not dict_["base_value"])
+                    if dict_["allow_others"]
+                    else int(dict_["base_value"])
+                ),
+                (2 if dict_["allow_others"] else 1),
+            )
+        )
+        for val in range(1, param_range_dict["num_helices"] + 1)
+        for dict_ in param_range_dict[val]
+    ]
+    param_names = [
+        (val, dict_["name"], dict_["type"])
+        for val in range(1, param_range_dict["num_helices"] + 1)
+        for dict_ in param_range_dict[val]
+    ]
+    grid_points = (
+        zip(param_names, index_to_parameters(i, *param_tuples))
+        for i in indices
+    )
+    for grid_point in grid_points:
+        helix_params = {
+            "num_helices": param_range_dict["num_helices"],
+            "helix_length": param_range_dict["helix_length"],
+        }
+        for (helix, name, param_type), value in grid_point:
+            if helix in helix_params:
+                helix_params[helix].append({name: value})
+            else:
+                helix_params[helix] = [{name: value}]
+        yield helix_params
 
 
 @click.command()
@@ -180,8 +231,8 @@ def main(out_dir, param_json, flags_file, chunk_index, num_chunks):
 
     table_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/ploop_fragment_set/tables/1ang_3_contact_ploop_set_4_v3.json"
     dict_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/ploop_fragment_set/dicts/1ang_3_contact_ploop_set_4_v3.bin"
-    rot_table_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/inverse_rotamer/tables/inverse_ptr_exchi7_rotamers_1ang_v1.json"
-    rot_dict_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/inverse_rotamer/dicts/inverse_ptr_exchi7_rotamers_1ang_v1.bin"
+    rot_table_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/inverse_rotamer/tables/inv_rot_exchi4_1_1_ang_15_deg.json"
+    rot_dict_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/inverse_rotamer/dicts/inv_rot_exchi4_1_1_ang_15_deg.bin"
     frag_table, frag_dict = load_table_and_dict(
         table_path, dict_path, np.dtype("i8"), np.dtype("i8")
     )
@@ -190,11 +241,10 @@ def main(out_dir, param_json, flags_file, chunk_index, num_chunks):
     )
     run_pyrosetta_with_flags(flags_file)
     grid_dict = json.loads(param_json)
-    sub_grid_dicts = subsample_grid(num_chunks, chunk_index, grid_dict)
-    name_hash = hash(param_json)
-    for param_dict in sub_grid_dicts:
+    for param_dict in subsample_grid(num_chunks, chunk_index, grid_dict):
         # param_dict = dict(param_json)
 
+        name_hash = abs(hash(json.dumps(param_dict)))
         pose = param_to_pose(param_dict)
         inf = pyrosetta.rosetta.core.pose.PDBInfo(pose)
         inf.name(f"param_bundle_{name_hash}.pdb")
@@ -206,15 +256,14 @@ def main(out_dir, param_json, flags_file, chunk_index, num_chunks):
         results["allowed_res"] = results.apply(
             lambda x: [*range(1, len(pose.residues) + 1)], axis=1
         )
+
         results["param_json"] = results.apply(lambda x: param_json, axis=1)
-        results = results.rename(
-            index=str,
-            columns={"frag_feature_to_start": "loop_func_to_bb_start"},
-        )
         sec_results = scan_for_inv_rot(
             pose, results, rot_table_path, rot_dict_path
         )
         if not sec_results is None:
+            with open(f"{out_dir}/{name_hash}_params.json", "w+") as f:
+                json.dump(param_dict, f)
             process_secondary_results(sec_results, pose, out_dir)
 
 
