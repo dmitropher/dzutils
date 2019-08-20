@@ -26,9 +26,11 @@ from dzutils.pyrosetta_utils import run_pyrosetta_with_flags
 def trim_frag_to_end(pose, position, chain=1):
     frag = pose.clone()
     # data["frag_end"] + 1,
-    frag.delete_residue_range_slow(
-        position, len(frag.split_by_chain()[chain].residues)
-    )
+    end = len(frag.split_by_chain()[chain].residues)
+    if position <= end:
+        frag.delete_residue_range_slow(
+            position, len(frag.split_by_chain()[chain].residues)
+        )
     return frag
 
 
@@ -76,7 +78,7 @@ def process_secondary_results(
         os.makedirs(sec_source_file_dir)
     # Add a grafted file entry with phos rotamer to each row, dump the pdb
     # Loop is unclosed!
-    secondary_results_table.loc[
+    secondary_results_table[
         "graft_and_pres_path"
     ] = secondary_results_table.apply(
         lambda row: f"""{grafted_file_dir
@@ -92,22 +94,22 @@ def process_secondary_results(
     secondary_results_table.apply(
         lambda row: trim_to_graft_start(
             super_and_insert_pose(
+                int(row["start_res"]),
+                int(row["end_res"]),
                 replace_res_from_pose(
                     pose.clone(),
                     pyrosetta.pose_from_file(row[inv_rot_file_label]),
-                    row[target_res_label],
+                    int(row[target_res_label]),
                     1,
                 ),
                 trim_frag_to_end(
                     pyrosetta.pose_from_file(row[fragment_file_label]),
-                    row[frag_end_label] + 1,
+                    int(row[frag_end_label] + 1),
                 ),
-                row["start_res"],
-                row["end_res"],
-                1,
+                row[frag_start_label],
                 insert_chain=1,
             ),
-            row["start_res"],
+            int(row["start_res"]),
         ).dump_pdb(row["graft_and_pres_path"]),
         axis=1,
     )

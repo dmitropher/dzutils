@@ -74,6 +74,7 @@ def replace_res_from_pose(pose, replacement, index, replacement_index):
         pyrosetta.rosetta.core.chemical.LOWER_TERMINUS_VARIANT,
         replacement_index,
     )
+
     pose.replace_residue(
         index, replacement_copy.residue(replacement_index), True
     )
@@ -151,7 +152,7 @@ def process_secondary_results(
             replace_res_from_pose(
                 pose.clone(),
                 pyrosetta.pose_from_file(row["inv_rot_file"]),
-                row["p_res_target"],
+                int(row["p_res_target"]),
                 1,
             ),
             pyrosetta.pose_from_file(row["loop_file"]).split_by_chain()[1],

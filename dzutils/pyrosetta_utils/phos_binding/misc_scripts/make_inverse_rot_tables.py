@@ -41,15 +41,10 @@ def main(
 ):
     pyrosetta.init(
         """-out:level 100
-        -extra_res_fa /home/dzorine/phos_binding/p_compounds/residues/PTR.params
         -packing:ex1
         -packing:ex2
         -packing:ex3
         -packing:ex4
-        -packing:ex1:level 7
-        -packing:ex2:level 7
-        -packing:ex3:level 7
-        -packing:ex4:level 7
 
     """
         # -extra_res_fa /home/dzorine/phos_binding/p_compounds/residues/PTR.params
