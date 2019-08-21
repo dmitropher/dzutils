@@ -1,4 +1,4 @@
-import sys, json, os
+import json, os
 
 import click
 import numpy as np
@@ -7,9 +7,7 @@ import pyrosetta
 
 from dzutils.pyrosetta_utils.phos_binding.parametric import (
     helix_bundle_maker_wrapper,
-    PyBundleGridSampler,
 )
-import pandas as pd
 from dzutils.pyrosetta_utils.phos_binding.misc_scripts.double_scan_pbinders import (
     scan_for_n_term_helical_grafts,
     scan_for_inv_rot,
@@ -254,8 +252,8 @@ def subsample_grid(num_chunks, index, param_range_dict):
 )
 def main(out_dir, param_json_path, flags_file, chunk_index, num_chunks):
 
-    table_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/ploop_fragment_set/tables/1ang_3_contact_ploop_set_4_v3.json"
-    dict_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/ploop_fragment_set/dicts/1ang_3_contact_ploop_set_4_v3.bin"
+    table_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/ploop_fragment_set/tables/1ang_3_contact_ploop_set_4_v4.json"
+    dict_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/ploop_fragment_set/dicts/1ang_3_contact_ploop_set_4_v4.bin"
     rot_table_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/inverse_rotamer/tables/inv_rot_exchi4_1_2_ang_15_deg.json"
     rot_dict_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/inverse_rotamer/dicts/inv_rot_exchi4_1_2_ang_15_deg.bin"
     frag_table, frag_dict = load_table_and_dict(
@@ -276,6 +274,7 @@ def main(out_dir, param_json_path, flags_file, chunk_index, num_chunks):
     for param_dict in subsample_grid(
         int(num_chunks), int(chunk_index), grid_dict
     ):
+
         # param_dict = dict(param_json)
         # print (*[(k,type(k),v,type(v)) for k,v in param_dict.items()])
         # print (*[(k,type(k),v,type(v)) for val in range(1,1+param_dict["num_helices"]) for dict_ in param_dict[val] for k,v in dict_.items()])
@@ -283,7 +282,7 @@ def main(out_dir, param_json_path, flags_file, chunk_index, num_chunks):
         name_hash = abs(hash(param_json))
         pose = param_to_pose(param_dict)
         # debug hack
-        pose = pyrosetta.pose_from_file("/home/dzorine/temp/ez_hit.pdb")
+        # pose = pyrosetta.pose_from_file("/home/dzorine/temp/ez_hit_2.pdb")
         inf = pyrosetta.rosetta.core.pose.PDBInfo(pose)
         inf.name(f"param_bundle_{name_hash}.pdb")
         pose.pdb_info(inf)
@@ -293,11 +292,13 @@ def main(out_dir, param_json_path, flags_file, chunk_index, num_chunks):
         results = scan_for_n_term_helical_grafts(
             pose, frag_table=frag_table, frag_dict=frag_dict
         )
-        results["allowed_res"] = results.apply(
-            lambda x: [*range(1, len(pose.residues) + 1)], axis=1
+        allowed = list(
+            list(range(1, len(pose.residues) + 1))
+            for i in range(len(results.index))
         )
-
+        results["allowed_res"] = allowed
         results["param_json"] = results.apply(lambda x: param_json, axis=1)
+        print(*[results[col] for col in results])
         sec_results = scan_for_inv_rot(
             pose,
             results,
@@ -307,12 +308,12 @@ def main(out_dir, param_json_path, flags_file, chunk_index, num_chunks):
             cart_resl=2,
             ori_resl=15,
         )
-        # print (results)
+        print(sec_results)
         if not sec_results is None:
             with open(f"{out_dir}/{name_hash}_params.json", "w+") as f:
                 json.dump(param_dict, f)
             process_secondary_results(sec_results, pose, out_dir)
-        break
+        # break
 
 
 if __name__ == "__main__":

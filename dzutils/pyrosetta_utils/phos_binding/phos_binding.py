@@ -9,7 +9,8 @@ from dzutils.pyrosetta_utils.geometry.pose_xforms import (
 )
 
 from dzutils.pyrosetta_utils.geometry.superposition_utilities import (
-    super_by_paired_atoms,super_by_residues
+    super_by_paired_atoms,
+    super_by_residues,
 )
 
 from dzutils.pyrosetta_utils import (
@@ -432,12 +433,16 @@ def super_and_insert_pose(
     newp = _pyrosetta.rosetta.core.pose.Pose()
     newp.detached_copy(pose)
 
-    _pyrosetta.rosetta.protocols.grafting.delete_region(newp, start, end)  # - 1
+    _pyrosetta.rosetta.protocols.grafting.delete_region(
+        newp, start, end
+    )  # - 1
 
-    print(start, end)
+    # print(start, end)
 
     _pyrosetta.rosetta.core.pose.remove_variant_type_from_pose_residue(
-        newp, _pyrosetta.rosetta.core.chemical.UPPER_TERMINUS_VARIANT, start - 1
+        newp,
+        _pyrosetta.rosetta.core.chemical.UPPER_TERMINUS_VARIANT,
+        start - 1,
     )
     if insert_chain:
         chains = moved_insertion.split_by_chain()
