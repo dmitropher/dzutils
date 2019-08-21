@@ -16,6 +16,8 @@ from dzutils.pyrosetta_utils.phos_binding.misc_scripts.double_scan_pbinders impo
     load_table_and_dict,
 )
 
+from dzutils import pythonify
+
 from dzutils.pyrosetta_utils.phos_binding import (
     super_and_insert_pose,
     replace_res_from_pose,
@@ -48,6 +50,27 @@ def trim_to_graft_start(pose, resnum):
     chain_begin = pose.chain_begin(chain_num)
     if resnum != chain_begin:
         pose.delete_residue_range_slow(chain_begin, resnum - 1)
+    return pose
+
+
+def ptr_from_chis(*chis):
+    # get chemical manager:
+    chemical_manager = (
+        pyrosetta.rosetta.core.chemical.ChemicalManager.get_instance()
+    )
+    rts = chemical_manager.residue_type_set(
+        pyrosetta.rosetta.core.chemical.TypeSetMode.FULL_ATOM_t
+    )
+    # Get phospho-TYR
+    res_type = rts.get_residue_type_with_variant_added(
+        rts.name_map("TYR"),
+        pyrosetta.rosetta.core.chemical.VariantType.PHOSPHORYLATION,
+    )
+    ptr = pyrosetta.rosetta.core.conformation.Residue(res_type, False)
+    pose = pyrosetta.rosetta.core.pose.Pose()
+    pose.append_residue_by_bond(ptr, False)
+    for i, chi in enumerate(chis, 1):
+        pose.set_chi(i, 1, chi)
     return pose
 
 
@@ -102,7 +125,7 @@ def process_secondary_results(
                 int(row["end_res"]),
                 replace_res_from_pose(
                     pose.clone(),
-                    pyrosetta.pose_from_file(row[inv_rot_file_label]),
+                    ptr_from_chis(*row["inv_rot_chis"]),
                     int(row[target_res_label]),
                     1,
                 ),
@@ -118,8 +141,8 @@ def process_secondary_results(
         axis=1,
     )
     secondary_results_table.apply(
-        lambda row: pyrosetta.pose_from_file(row[inv_rot_file_label]).dump_pdb(
-            f'{sec_source_file_dir}/{row[inv_rot_file_label].split("/")[-1]}'
+        lambda row: ptr_from_chis(*row["inv_rot_chis"]).dump_pdb(
+            f'{sec_source_file_dir}/ptr_{"_".join(str(chi) for chi in row["inv_rot_chis"])}.pdb'
         ),
         axis=1,
     )
@@ -129,9 +152,8 @@ def param_to_pose(param_dict):
     """
     """
     params_for_helices = [
-        param_dict[str(i)] for i in range(1, param_dict["num_helices"] + 1)
+        param_dict[i] for i in range(1, param_dict["num_helices"] + 1)
     ]
-
     # Use the wrapper to create the MakeBundle Mover
     bundle_maker = helix_bundle_maker_wrapper(
         param_dict["helix_length"], *params_for_helices, degrees=True
@@ -149,20 +171,22 @@ def num_params(param_range_dict):
 
     dict must have either range type params or binary and must specify num helix
     """
-    return np.product(
-        [
-            (
-                dict_["steps"]
-                if dict_["type"] == "range"
-                else ((2 if dict_["allow_others"] else 1))
-            )
-            for val in range(1, param_range_dict["num_helices"] + 1)
-            for dict_ in param_range_dict[val]
-        ]
+    return int(
+        np.product(
+            [
+                (
+                    dict_["steps"]
+                    if dict_["type"] == "range"
+                    else ((2 if dict_["allow_others"] else 1))
+                )
+                for val in range(1, param_range_dict["num_helices"] + 1)
+                for dict_ in param_range_dict[val]
+            ]
+        )
     )
 
 
-def subsample_grid(num_chunks, index, **param_range_dict):
+def subsample_grid(num_chunks, index, param_range_dict):
     """
     Takes a set of grid params and slices off the given chunk
     """
@@ -211,15 +235,16 @@ def subsample_grid(num_chunks, index, **param_range_dict):
         }
         for (helix, name, param_type), value in grid_point:
             if helix in helix_params:
-                helix_params[helix].append({name: value})
+
+                helix_params[helix][name] = float(value)
             else:
-                helix_params[helix] = [{name: value}]
+                helix_params[helix] = {name: float(value)}
         yield helix_params
 
 
 @click.command()
 @click.option("-o", "--out-dir")
-@click.option("-p", "--param-json")
+@click.option("-p", "--param-json-path")
 @click.option("-i", "--chunk-index")
 @click.option("-c", "--num-chunks")
 @click.option(
@@ -227,12 +252,12 @@ def subsample_grid(num_chunks, index, **param_range_dict):
     "--flags-file",
     default="/home/dzorine/phos_binding/run_files/p_ligand_quiet.flags",
 )
-def main(out_dir, param_json, flags_file, chunk_index, num_chunks):
+def main(out_dir, param_json_path, flags_file, chunk_index, num_chunks):
 
     table_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/ploop_fragment_set/tables/1ang_3_contact_ploop_set_4_v3.json"
     dict_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/ploop_fragment_set/dicts/1ang_3_contact_ploop_set_4_v3.bin"
-    rot_table_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/inverse_rotamer/tables/inv_rot_exchi4_1_1_ang_15_deg.json"
-    rot_dict_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/inverse_rotamer/dicts/inv_rot_exchi4_1_1_ang_15_deg.bin"
+    rot_table_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/inverse_rotamer/tables/inv_rot_exchi4_1_2_ang_15_deg.json"
+    rot_dict_path = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables/inverse_rotamer/dicts/inv_rot_exchi4_1_2_ang_15_deg.bin"
     frag_table, frag_dict = load_table_and_dict(
         table_path, dict_path, np.dtype("i8"), np.dtype("i8")
     )
@@ -240,31 +265,54 @@ def main(out_dir, param_json, flags_file, chunk_index, num_chunks):
         rot_table_path, rot_dict_path, np.dtype("i8"), np.dtype("i8")
     )
     run_pyrosetta_with_flags(flags_file)
-    grid_dict = json.loads(param_json)
-    for param_dict in subsample_grid(num_chunks, chunk_index, grid_dict):
-        # param_dict = dict(param_json)
+    grid_dict = {}
+    with open(param_json_path, "r") as f:
+        grid_dict = json.load(f)
+    # Dumb hack to turn json string keys into ints where possible
+    # TODO just dont use int keys in anything you want to json or serialize
+    # in a different way
 
-        name_hash = abs(hash(json.dumps(param_dict)))
+    grid_dict = pythonify(grid_dict)
+    for param_dict in subsample_grid(
+        int(num_chunks), int(chunk_index), grid_dict
+    ):
+        # param_dict = dict(param_json)
+        # print (*[(k,type(k),v,type(v)) for k,v in param_dict.items()])
+        # print (*[(k,type(k),v,type(v)) for val in range(1,1+param_dict["num_helices"]) for dict_ in param_dict[val] for k,v in dict_.items()])
+        param_json = json.dumps(param_dict)
+        name_hash = abs(hash(param_json))
         pose = param_to_pose(param_dict)
+        # debug hack
+        pose = pyrosetta.pose_from_file("/home/dzorine/temp/ez_hit.pdb")
         inf = pyrosetta.rosetta.core.pose.PDBInfo(pose)
         inf.name(f"param_bundle_{name_hash}.pdb")
         pose.pdb_info(inf)
 
         if not len(pose.residues):
             continue
-        results = scan_for_n_term_helical_grafts(pose, table_path, dict_path)
+        results = scan_for_n_term_helical_grafts(
+            pose, frag_table=frag_table, frag_dict=frag_dict
+        )
         results["allowed_res"] = results.apply(
             lambda x: [*range(1, len(pose.residues) + 1)], axis=1
         )
 
         results["param_json"] = results.apply(lambda x: param_json, axis=1)
         sec_results = scan_for_inv_rot(
-            pose, results, rot_table_path, rot_dict_path
+            pose,
+            results,
+            inv_rot_table=rot_table,
+            inv_rot_dict=rot_dict,
+            feature_xform_label="frag_feature_to_start",
+            cart_resl=2,
+            ori_resl=15,
         )
+        # print (results)
         if not sec_results is None:
             with open(f"{out_dir}/{name_hash}_params.json", "w+") as f:
                 json.dump(param_dict, f)
             process_secondary_results(sec_results, pose, out_dir)
+        break
 
 
 if __name__ == "__main__":
