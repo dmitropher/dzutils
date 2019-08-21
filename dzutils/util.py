@@ -11,3 +11,24 @@ def read_flag_file(filename):
     # filter the lines
     lines = [l for l in lines if l.startswith("-")]
     return " ".join(lines)
+
+
+def pythonify(json_data):
+
+    correctedDict = {}
+
+    for key, value in json_data.items():
+        if isinstance(value, list):
+            value = [
+                pythonify(item) if isinstance(item, dict) else item
+                for item in value
+            ]
+        elif isinstance(value, dict):
+            value = pythonify(value)
+        try:
+            key = int(key)
+        except Exception as ex:
+            pass
+        correctedDict[key] = value
+
+    return correctedDict

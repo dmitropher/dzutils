@@ -30,8 +30,8 @@ def dump_residue_as_pdb(residue, path):
 
 @click.command()
 @click.option("-o", "--res-out-dir")
-@click.option("-a", "--angle-res", default=15)
-@click.option("-d", "--angstrom-dist-res", default=1)
+@click.option("-a", "--angle-res", default=15.0)
+@click.option("-d", "--angstrom-dist-res", default=1.0)
 @click.option("-r", "--run-name", default="inverse_ptr_exchi7_rotamers")
 @click.option("-e", "--erase/--no-erase", default=False)
 def main(
@@ -44,8 +44,10 @@ def main(
     pyrosetta.init(
         """-out:level 100
         -packing:extrachi_cutoff 0
-        -packing:ex1:level 2
-        -packing:ex2:level 2
+        -packing:ex1:level 4
+        -packing:ex2:level 4
+        -packing:ex3:level 4
+        -packing:ex4:level 4
 
     """
         # -extra_res_fa /home/dzorine/phos_binding/p_compounds/residues/PTR.params

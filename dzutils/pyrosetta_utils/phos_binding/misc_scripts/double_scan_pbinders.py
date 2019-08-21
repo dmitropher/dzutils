@@ -251,6 +251,7 @@ def scan_for_inv_rot(
     feature_xform_label="loop_func_to_bb_start",
     inv_rot_key_type=np.dtype("i8"),
     inv_rot_value_type=np.dtype("i8"),
+    **xbin_args,
 ):
     assert bool(
         (inv_rot_table is not None and inv_rot_dict is not None)
@@ -267,7 +268,7 @@ def scan_for_inv_rot(
     )
 
     # generate the keys for inverse rotamer
-    binner = XB()
+    binner = XB(**xbin_args)
     working = pose.clone()
     start_to_end_xforms = np.array(
         [
@@ -285,15 +286,18 @@ def scan_for_inv_rot(
     )
     key_series = pd.Series(keys)
     results["inv_rot_key"] = key_series
-    """results.apply(
-        lambda row: binner.get_bin_index(
-            row[feature_xform_label]
-            @ generate_pose_rt_between_res(
-                pose.clone(), row["start_res"], row["p_res_target"]
-            )
-        ),
-        axis=1,
-    )"""
+    # print (results)
+    # print (key_series)
+    # print (results.apply(
+    #     lambda row: binner.get_bin_index(
+    #         row[feature_xform_label]
+    #         @ generate_pose_rt_between_res(
+    #             pose.clone(), row["start_res"], row["p_res_target"]
+    #         )
+    #     ),
+    #     axis=1,
+    # )
+    # )
     # print (results)
     # TODO - include the inv rot reference atoms as well as loop func to bb start
 
@@ -313,9 +317,9 @@ def scan_for_inv_rot(
         return
 
     # retrieve rotamers from table
-    rot_masked_df["inv_rot_inds"] = inv_rot_dict[
-        np.array(rot_masked_df["inv_rot_key"])
-    ]
+    keys = inv_rot_dict[np.array(rot_masked_df["inv_rot_key"].copy())]
+    key_series = pd.Series(keys)
+    rot_masked_df = rot_masked_df.assign(inv_rot_inds=key_series.values)
     results = rot_masked_df.loc[~rot_masked_df.index.duplicated(keep="first")]
     for col in inv_rot_table:
         results[f"inv_rot_{col}"] = results["inv_rot_inds"].map(
