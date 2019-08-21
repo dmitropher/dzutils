@@ -298,7 +298,7 @@ def main(out_dir, param_json_path, flags_file, chunk_index, num_chunks):
         )
         results["allowed_res"] = allowed
         results["param_json"] = results.apply(lambda x: param_json, axis=1)
-        print(*[results[col] for col in results])
+        # print(*[results[col] for col in results])
         sec_results = scan_for_inv_rot(
             pose,
             results,
@@ -308,7 +308,7 @@ def main(out_dir, param_json_path, flags_file, chunk_index, num_chunks):
             cart_resl=2,
             ori_resl=15,
         )
-        print(sec_results)
+        # print(sec_results)
         if not sec_results is None:
             with open(f"{out_dir}/{name_hash}_params.json", "w+") as f:
                 json.dump(param_dict, f)
