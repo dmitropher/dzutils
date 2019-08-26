@@ -1,4 +1,5 @@
-from os.path import isfile
+from os import makedirs
+from os.path import isfile, isdir
 import click
 
 import pyrosetta
@@ -72,6 +73,8 @@ def main(
     binner = xb(cart_resl=angstrom_dist_res, ori_resl=angle_res)
     rt_dicts = []
     if res_out_dir:
+        if not isdir(res_out_dir):
+            makedirs(res_out_dir)
         # out_dir = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/ptr_rotamers/ptr_exchi7_rotamer_set"
         rt_dicts = [
             {
@@ -108,7 +111,7 @@ def main(
         assert bool(
             not (isfile(data_out_path))
         ), "Table with this name already exists"
-        inv_rot_table.to_json(data_out_path)
+    inv_rot_table.to_json(data_out_path)
 
     inv_rot_keys = np.array(inv_rot_table["key_int"], dtype=np.int64)
     inv_rot_vals = np.array(inv_rot_table["index"], dtype=np.int64)
