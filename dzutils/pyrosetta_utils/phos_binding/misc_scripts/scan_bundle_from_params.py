@@ -72,6 +72,63 @@ def ptr_from_chis(*chis):
     return pose
 
 
+def graft_primary_results(
+    primary_results_table,
+    pose,
+    out_dir,
+    fragment_file_label="frag_filename",
+    frag_index_label="frag_index",
+    frag_end_label="frag_end",
+    frag_start_label="frag_start",
+    table_label="",
+    pdb_label="",
+):
+    """
+    """
+    if not os.path.isdir(out_dir):
+        os.makedirs(out_dir)
+    primary_write_path = f"""{out_dir
+                               }/primary_hits{
+                               table_label
+                               }.json"""
+
+    grafted_file_dir = f"{out_dir}/grafted_helices"
+
+    if not os.path.isdir(grafted_file_dir):
+        os.makedirs(grafted_file_dir)
+    sec_source_file_dir = f"{out_dir}/source_files"
+    if not os.path.isdir(sec_source_file_dir):
+        os.makedirs(sec_source_file_dir)
+    # Add a grafted file entry with phos rotamer to each row, dump the pdb
+    # Loop is unclosed!
+    primary_results_table["graft_and_pres_path"] = primary_results_table.apply(
+        lambda row: f"""{grafted_file_dir
+                }/{
+                row["name"].split("/")[-1].split(".pdb")[0]
+                }{pdb_label}_ploop_index_{
+                row[frag_index_label]
+                }S.pdb""",
+        axis=1,
+    )
+    primary_results_table.apply(
+        lambda row: trim_to_graft_start(
+            super_and_insert_pose(
+                int(row["start_res"]),
+                int(row["end_res"]),
+                pose.clone(),
+                trim_frag_to_end(
+                    pyrosetta.pose_from_file(row[fragment_file_label]),
+                    int(row[frag_end_label] + 1),
+                ),
+                row[frag_start_label],
+                insert_chain=1,
+            ),
+            int(row["start_res"]),
+        ).dump_pdb(row["graft_and_pres_path"]),
+        axis=1,
+    )
+
+
 def process_secondary_results(
     secondary_results_table,
     pose,
@@ -292,6 +349,8 @@ def main(out_dir, param_json_path, flags_file, chunk_index, num_chunks):
         results = scan_for_n_term_helical_grafts(
             pose, frag_table=frag_table, frag_dict=frag_dict
         )
+        if results is None:
+            continue
         allowed = list(
             list(range(1, len(pose.residues) + 1))
             for i in range(len(results.index))
