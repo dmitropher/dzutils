@@ -138,13 +138,48 @@ def homog_relative_transform_from_residues(res1, res2):
     )
 
 
+def homog_super_transform(xform1, xform2):
+    """
+    returns the super xform between two rotation translation matrices
+
+    super is defined by the left multiplied matrix that moves an object from
+    the local xform1->xform2
+    """
+    xform1_inv = invert_homog(xform1)
+    return xform2 @ xform1_inv
+
+
+def homog_super_transform_from_stubs(stub1, stub2):
+    """
+    Converts Rosetta stubs to a homog super xform between the two
+
+    super is defined by the left multiplied matrix that moves an object from
+    the local xform1->xform2
+    """
+    hstub1, hstub2 = stub_to_homog(stub1), stub_to_homog(stub2)
+
+    return homog_super_transform(hstub1, hstub2)
+
+
+def homog_super_transform_from_residues(res1, res2):
+    """
+    Wrapper for making CA to CA homogenous super transform between residues
+
+    super is defined by the left multiplied matrix that moves an object from
+    the local xform1->xform2
+    """
+    return homog_super_transform_from_stubs(
+        _stub_from_residue(res1), _stub_from_residue(res2)
+    )
+
+
 def super_from_rt(source, dest, rt):
     """
     returns a homog xform that superimposes source onto the rt from dest
 
     Takes homogenous xforms
     """
-    return dest @ rt @ invert_homog(source)
+    return homog_super_transform(source, dest @ rt)
 
 
 def superimpose_stub_by_rt(stub1, stub2, rt):
