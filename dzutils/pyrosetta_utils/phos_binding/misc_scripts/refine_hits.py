@@ -20,6 +20,7 @@ from dzutils.pyrosetta_utils.geometry.homog import (
 )
 
 
+<<<<<<< HEAD
 def index_to_index(pose_1, pose_2, resnum_1, resnum_2, atom_1):
     """
     Dumb hack to get around wonky rosetta atom indexing
@@ -38,6 +39,9 @@ def build_harmonic_pair_constraint(res_1, atom_1, res_2, atom_2, value, sd):
     #     f"{atom_2}, {res_2}",
     #     sep="\n",
     # )
+=======
+def build_harmonic_pair_constraint(res_1, atom_1, res_2, atom_2, value, sd):
+>>>>>>> c6cacf0e1f326a912e768fd857dd4638d4bfc042
     return pyrosetta.rosetta.core.scoring.constraints.AtomPairConstraint(
         pyrosetta.rosetta.core.id.AtomID(atom_1, res_1),
         pyrosetta.rosetta.core.id.AtomID(atom_2, res_2),
@@ -45,6 +49,7 @@ def build_harmonic_pair_constraint(res_1, atom_1, res_2, atom_2, value, sd):
     )
 
 
+<<<<<<< HEAD
 def build_idealized_hbond_cst(
     target_pose,
     rot_residue,
@@ -131,6 +136,8 @@ def build_idealized_hbond_cst(
     return constraints
 
 
+=======
+>>>>>>> c6cacf0e1f326a912e768fd857dd4638d4bfc042
 def build_hbond_cst(
     grafted_pose,
     rot_pose,
@@ -140,7 +147,10 @@ def build_hbond_cst(
     grafted_pose_loop_start_resnum,
     rotamer_alignment_atoms,
     acceptor_atoms,
+<<<<<<< HEAD
     sd=0.125,
+=======
+>>>>>>> c6cacf0e1f326a912e768fd857dd4638d4bfc042
 ):
     """
     Build atom pair constraints to preserve the native hbonds
@@ -189,7 +199,11 @@ def build_hbond_cst(
                 hbond.don_res(),
                 hbond.don_hatm(),
                 value=hbond.get_HAdist(check_pose),
+<<<<<<< HEAD
                 sd=sd,
+=======
+                sd=0.125,
+>>>>>>> c6cacf0e1f326a912e768fd857dd4638d4bfc042
             ),
             # build_harmonic_pair_constraint(
             #     target_rotamer_resnum,

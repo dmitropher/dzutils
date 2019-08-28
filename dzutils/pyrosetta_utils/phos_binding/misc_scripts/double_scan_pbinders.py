@@ -53,7 +53,6 @@ def pairs_in_range(
         for val in range(min_size, max_size + 1)
         if start + val >= min_end_position and start + val <= end
     ]
-    # print(pairs)
     return pairs
 
 
@@ -76,6 +75,7 @@ def pose_fragments_to_pose_xforms(
     minus=0,
     max_dist_from_begin=-1,
     max_dist_from_end=-1,
+    **xbin_kwargs,
 ):
     """
     Gives the pose_xform objects for all res pairs in fragments from dssp_types
@@ -87,6 +87,8 @@ def pose_fragments_to_pose_xforms(
 
     plus or minus range to check around each fragment found by dssp (useful for
     finding residues anchoring loops)
+
+    xbin arguments to tune the binning
 
     max distance from beginning and end where a fragment can lie (default any)
     """
@@ -286,19 +288,6 @@ def scan_for_inv_rot(
     )
     key_series = pd.Series(keys)
     results["inv_rot_key"] = key_series
-    # print (results)
-    # print (key_series)
-    # print (results.apply(
-    #     lambda row: binner.get_bin_index(
-    #         row[feature_xform_label]
-    #         @ generate_pose_rt_between_res(
-    #             pose.clone(), row["start_res"], row["p_res_target"]
-    #         )
-    #     ),
-    #     axis=1,
-    # )
-    # )
-    # print (results)
     # TODO - include the inv rot reference atoms as well as loop func to bb start
 
     # load inv_rot table and dict

@@ -74,7 +74,6 @@ def replace_res_from_pose(pose, replacement, index, replacement_index):
         pyrosetta.rosetta.core.chemical.LOWER_TERMINUS_VARIANT,
         replacement_index,
     )
-
     pose.replace_residue(
         index, replacement_copy.residue(replacement_index), True
     )
