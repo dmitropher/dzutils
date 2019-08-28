@@ -5,6 +5,34 @@ from dzutils.pdb_file_utils import pdb_files_in_dir as _pfd
 from dzutils.util import read_flag_file
 
 
+def residue_type_from_name3(name, variant=None):
+    """
+    Returns a new residue object from the current ResidueTypeSet
+
+    Optionally specify VariantType to get the appropriate variant
+
+    This function is basically just a wrapper to improve code readability
+    """
+    chemical_manager = (
+        pyrosetta.rosetta.core.chemical.ChemicalManager.get_instance()
+    )
+    rts = chemical_manager.residue_type_set(
+        pyrosetta.rosetta.core.chemical.TypeSetMode.FULL_ATOM_t
+    )
+    if variant:
+        return rts.get_residue_type_with_variant_added(
+            rts.name_map(name), variant
+        )
+    else:
+        return rts.name_map(name)
+
+
+def residue_from_name3(name, variant=None):
+    return _pyr.core.conformation.Residue(
+        residue_type_from_name3(name, variant), True
+    )
+
+
 def run_pyrosetta_with_flags(flags_file_path):
     flags = read_flag_file(flags_file_path)
     flags_str = " ".join(flags.replace("\n", " ").split())
