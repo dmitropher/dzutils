@@ -20,12 +20,115 @@ from dzutils.pyrosetta_utils.geometry.homog import (
 )
 
 
+def index_to_index(pose_1, pose_2, resnum_1, resnum_2, atom_1):
+    """
+    Dumb hack to get around wonky rosetta atom indexing
+
+    TODO make a not dumb mapping b/w index/name/atom/res
+    """
+    return pose_2.residue(resnum_2).atom_index(
+        pose_1.residue(resnum_1).atom_name(atom_1)
+    )
+
+
 def build_harmonic_pair_constraint(res_1, atom_1, res_2, atom_2, value, sd):
+    # print(
+    #     "building atomIDs: ",
+    #     f"{atom_1}, {res_1}",
+    #     f"{atom_2}, {res_2}",
+    #     sep="\n",
+    # )
     return pyrosetta.rosetta.core.scoring.constraints.AtomPairConstraint(
         pyrosetta.rosetta.core.id.AtomID(atom_1, res_1),
         pyrosetta.rosetta.core.id.AtomID(atom_2, res_2),
         pyrosetta.rosetta.core.scoring.func.HarmonicFunc(value, sd),
     )
+
+
+def build_idealized_hbond_cst(
+    target_pose,
+    rot_residue,
+    super_xform,
+    acceptor_atoms,
+    target_resnum,
+    sd=0.125,
+    bb_only=True,
+):
+    """
+    Use the super xform to place rot_res at the idea position, return the csts
+
+    The super xform should take the rot res where it is in space and align
+    it to the idealized position.
+
+    The target resnum is the non-idealized resnum of the final rotamer
+
+    target_pose needs to have the residue at the same position!
+
+    The distance set by the cst is the hbond distance in the "ideal" position,
+    but the sd is configurable
+    """
+    rot_pose = pyrosetta.rosetta.core.pose.Pose()
+    rot_pose.append_residue_by_bond(rot_residue)
+
+    rotation, translation = np_homog_to_rosetta_rotation_translation(
+        super_xform
+    )
+    pyrosetta.rosetta.protocols.toolbox.pose_manipulation.rigid_body_move(
+        rotation,
+        translation,
+        rot_pose,
+        pyrosetta.rosetta.core.select.residue_selector.TrueResidueSelector().apply(
+            rot_pose
+        ),
+        pyrosetta.rosetta.numeric.xyzVector_double_t(0, 0, 0),
+    )
+    check_pose = target_pose.clone()
+    pyrosetta.rosetta.core.pose.append_pose_to_pose(check_pose, rot_pose, True)
+    test_file_path = (
+        f"{check_pose.pdb_info().name().split('.pdb')[0]}_check.pdb"
+    )
+    print(test_file_path)
+    print("building constraints for:")
+    print(f"{check_pose.residue(target_resnum)}")
+    check_pose.dump_pdb(test_file_path)
+    check_index = len(check_pose.residues)
+    hbond_set = build_hbond_set(check_pose)
+    constraints = [
+        cst
+        for hbond in hbond_set.residue_hbonds(check_index)
+        if (hbond.don_hatm_is_protein_backbone() if bb_only else True)
+        if hbond.acc_atm() in acceptor_atoms
+        for cst in (
+            build_harmonic_pair_constraint(
+                target_resnum,
+                # target_pose.residue(target_resnum).atom_index(
+                #     check_pose.residue(check_index).atom_name(hbond.acc_atm())
+                # ),
+                index_to_index(
+                    check_pose,
+                    target_pose,
+                    check_index,
+                    target_resnum,
+                    hbond.acc_atm(),
+                ),
+                hbond.don_res(),
+                hbond.don_hatm(),
+                value=hbond.get_HAdist(check_pose),
+                sd=sd,
+            ),
+            # build_harmonic_pair_constraint(
+            #     target_rotamer_resnum,
+            #     hbond.acc_atm(),
+            #     hbond.don_res(),
+            #     check_pose.residue(hbond.don_res()).atom_base(
+            #         hbond.don_hatm()
+            #     ),
+            #     value=2.5,
+            #     sd=0.25,
+            # ),
+        )
+    ]
+    return constraints
 
 
 def build_hbond_cst(
@@ -37,6 +140,7 @@ def build_hbond_cst(
     grafted_pose_loop_start_resnum,
     rotamer_alignment_atoms,
     acceptor_atoms,
+    sd=0.125,
 ):
     """
     Build atom pair constraints to preserve the native hbonds
@@ -85,7 +189,7 @@ def build_hbond_cst(
                 hbond.don_res(),
                 hbond.don_hatm(),
                 value=hbond.get_HAdist(check_pose),
-                sd=0.125,
+                sd=sd,
             ),
             # build_harmonic_pair_constraint(
             #     target_rotamer_resnum,
