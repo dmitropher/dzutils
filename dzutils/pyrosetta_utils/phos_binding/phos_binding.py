@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-from itertools import permutations, combinations,product
-=======
 from itertools import permutations, combinations, product
->>>>>>> c6cacf0e1f326a912e768fd857dd4638d4bfc042
 import numpy as _np
 import pyrosetta as _pyrosetta
 from xbin import XformBinner as _xb
@@ -29,10 +25,6 @@ from dzutils.pyrosetta_utils.secstruct import parse_structure_from_dssp
 
 from dzutils.pyrosetta_utils.chain_utils import link_poses
 
-<<<<<<< HEAD
-
-=======
->>>>>>> c6cacf0e1f326a912e768fd857dd4638d4bfc042
 
 def rt_list_hbond_to_res(pose, resnum, sidechain=False, minimal=False):
     """
@@ -156,13 +148,10 @@ def loops_to_rt_dict(pose, plus=0, minus=0):
     return [
         pair_to_rt_dict(pose, i, j)
         for loop in parse_structure_from_dssp(pose, "L")
-<<<<<<< HEAD
         for i, j in permutations(loop.resnum_list(), 2)
         if i < j
         if i != 1
 
-=======
->>>>>>> c6cacf0e1f326a912e768fd857dd4638d4bfc042
         for start, end in [
             (
                 loop.resnum_list(upstream=minus, downstream=plus)[0],
@@ -259,12 +248,6 @@ def replace_p_res_with_phosphate(pose, min_contacts=0):
     return newp
 
 
-<<<<<<< HEAD
-
-
-
-=======
->>>>>>> c6cacf0e1f326a912e768fd857dd4638d4bfc042
 def phos_bonded_atoms_by_index(residue):
     """
     returns a dict with P atom index : [list of bonded atoms] for each P atom
@@ -316,16 +299,9 @@ def get_bb_hbonds(pose):
     hbond_set = build_hbond_set(pose)
 
     return [
-<<<<<<< HEAD
-            exclude_self_and_non_bb_hbonds(
-                hbond_to_residue(pose, resnum, hbond_set=hbond_set, vec=False),
-                *acceptor_atoms,
-
-=======
         exclude_self_and_non_bb_hbonds(
             hbond_to_residue(pose, resnum, hbond_set=hbond_set, vec=False),
             *acceptor_atoms,
->>>>>>> c6cacf0e1f326a912e768fd857dd4638d4bfc042
         )
         # And a dict of acceptable acceptor atoms (atoms bound to P)
         # keys are p atoms, values are lists of bound atoms
