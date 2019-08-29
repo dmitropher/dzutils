@@ -104,9 +104,14 @@ def process_hits_by_rmsd(
 
 
 def kd_tree_from_rotamer_table(chi_table, *fields):
-    chis = list(chi_table[[*fields]])
+    chis = []
+    if len(fields) > 1:
+        chis = list(tuple(chis) for chis in chi_table[list(fields)].values)
+    else:
+        chis = list(tuple(*chis) for chis in chi_table[list(fields)].values)
     chis.sort()
     unique_chis = np.array(list(k for k, _ in groupby(chis)))
+    # print(unique_chis)
     return KDTree(unique_chis), unique_chis
 
 
@@ -130,7 +135,7 @@ def process_misses(misses_df, data_table, *rotamer_fields):
                 *chi_data[nearest_chi_tree.query(restype_chis[1:])[1]],
             ),
         )
-        for pose, restype_chis in zip(data_table["rot_pose"], miss_chis)
+        for pose, restype_chis in zip(misses_df["rot_pose"], miss_chis)
     ]
     misses_df["rmsd_to_ideal"] = pd.Series(miss_rmsd)
     return misses_df
@@ -205,7 +210,8 @@ def test_hash_table(
         super=super_hits_before_rmsd,
     )
     misses = process_misses(misses_df, data_table, *data_table_rotamer_fields)
-
+    hits = hits[[col for col in hits if col != "rot_pose"]]
+    misses = misses[[col for col in misses if col != "rot_pose"]]
     return hits, misses
 
 
