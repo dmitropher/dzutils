@@ -124,12 +124,59 @@ def get_smear_bcc_keys_and_rads(
     return keys_rads
 
 
-def smear(binner, hashmap, radius):
+def smear_by_chunk(binner, hashmap, radius, chunk_size=1):
 
     exhalf = False
     radius_cut = neighbor_radius_square_cut(radius, exhalf)
     all_keys = []
     all_vals = []
+    count = 0
+    for key, val in hashmap.items():
+
+        cell_key = key >> 58
+        # bcc_key = (key << 6) >> 6
+        bcc_key = key & 0x3FFFFFFFFFFFFFF
+        # xform = binner.get_bin_center(key)
+        # cell_key, f6 = xbin.xform_to_f6(xform)
+        # bcc_key = binner.bcc6.get_bin_index(f6)
+
+        bcc_keys, rads = get_smear_bcc_keys_and_rads(
+            cell_key,
+            bcc_key,
+            _nside_prod(binner.bcc6),
+            binner.bcc6.nside,
+            val,
+            radius_cut,
+        )
+        # print (len (bcc_keys))
+        new_bcc_keys = np.array(bcc_keys)
+        new_keys = np.bitwise_or(
+            np.right_shift(np.int64(cell_key), np.int64(58)),
+            np.int64(new_bcc_keys),
+        )
+        # new_f6 = binner.bcc6.get_bin_center(new_bcc_key)
+        # center = f6_to_xform(cell_key, new_f6)
+        # new_key = binner.get_bin_index(center)
+        all_keys.append(new_keys)
+        all_vals.append(np.repeat([val], len(new_keys)))
+        count += 1
+        if count > chunk_size:
+            count = 0
+            hashmap[np.concatenate(all_keys)] = np.concatenate(all_vals)
+            all_keys = []
+            all_vals = []
+    hashmap[np.concatenate(all_keys)] = np.concatenate(all_vals)
+
+
+def smear(binner, hashmap, radius, chunk_size=1):
+
+    exhalf = False
+    radius_cut = neighbor_radius_square_cut(radius, exhalf)
+    all_keys = []
+    all_vals = []
+    if chunk_size > 1:
+        smear_by_chunk(binner, hashmap, radius, chunk_size=1)
+        return
     for key, val in hashmap.items():
 
         cell_key = key >> 58
