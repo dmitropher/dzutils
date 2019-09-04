@@ -151,7 +151,6 @@ def loops_to_rt_dict(pose, plus=0, minus=0):
         for i, j in permutations(loop.resnum_list(), 2)
         if i < j
         if i != 1
-
         for start, end in [
             (
                 loop.resnum_list(upstream=minus, downstream=plus)[0],
@@ -165,7 +164,7 @@ def loops_to_rt_dict(pose, plus=0, minus=0):
     ]
 
 
-def phospho_residue_inverse_rotamer_rts(residue):
+def phospho_residue_inverse_rotamer_rts(residue, alignment_atoms=False):
     """
     Returns the RTs from the phos group to bb
 
@@ -185,6 +184,8 @@ def phospho_residue_inverse_rotamer_rts(residue):
     pose.append_residue_by_bond(residue)
     return [
         generate_pose_rt_between_res(pose.clone(), 1, 1, base)
+        if not alignment_atoms
+        else (generate_pose_rt_between_res(pose.clone(), 1, 1, base), base)
         for base in possible_rt_bases
     ]
 
@@ -343,7 +344,7 @@ def minimal_fragments_by_contact_number(pose, min_contacts=1, append_factor=0):
             "end": max(*contact_set) + y,
         }
         for hbonds in hbond_collection
-        for r in [get_acceptor_res_for_hbond_collection(hbonds),]
+        for r in [get_acceptor_res_for_hbond_collection(hbonds)]
         if len(hbonds) >= min_contacts
         for contact_set in combinations(
             [bond.don_res() for bond in hbonds], min_contacts
@@ -410,13 +411,9 @@ def minimal_fragments_by_secondary_structure(
                 if lazy:
                     break
         if not start_struct:
-            start_struct = max(start_contact - append_factor,1)
+            start_struct = max(start_contact - append_factor, 1)
         out_list.append(
-            {
-                "acceptor_res": resnum,
-                "start": start_struct,
-                "end": end_struct,
-            }
+            {"acceptor_res": resnum, "start": start_struct, "end": end_struct}
         )
     return out_list
 

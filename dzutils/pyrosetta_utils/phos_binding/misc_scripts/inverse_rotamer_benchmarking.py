@@ -39,7 +39,13 @@ def get_rotamer_residue_from_name(resname):
     return pyrosetta.rosetta.core.conformation.Residue(residue_type, False)
 
 
-def get_rotamer_pose(resname, *chis):
+def set_rotamer_chis(rot, *chis):
+    for i, chi in enumerate(chis, 1):
+        rot.set_chi(i, chi)
+    return rot
+
+
+def get_rotamer_pose_from_name(resname, *chis):
     pose = pyrosetta.rosetta.core.pose.Pose()
     residue = get_rotamer_residue_from_name(resname)
     pose.append_residue_by_bond(residue)
@@ -58,12 +64,16 @@ def value_to_pose(
 ):
     if conversion_type == "from_file":
         return pyrosetta.pose_from_file(
-            data_table[data_table["index"] == value][[*data_table_fields]]
+            data_table[data_table["index"] == value][list(data_table_fields)]
         )
     if conversion_type == "from_chis":
         # get chis from the data table somehow
-        chis = data_table[data_table["index"] == value][[*data_table_fields]]
-        return get_rotamer_pose(residue_type_name, *chis)
+        table_entry = data_table[data_table["index"] == value]
+        # print (table_entry)
+        # print (value)
+        chis = tuple(*table_entry.iloc[0][list(data_table_fields)].values)
+        # print (chis)
+        return get_rotamer_pose_from_name(residue_type_name, *chis)
 
 
 def rotamer_rmsd(pose_1, pose_2, super=True):
@@ -76,13 +86,19 @@ def rotamer_rmsd(pose_1, pose_2, super=True):
 
 
 def process_hits_by_rmsd(
-    hits_df, data_table, conversion_type, *data_table_fields, super=True
+    hits_df,
+    values,
+    data_table,
+    conversion_type,
+    *data_table_fields,
+    super=True,
 ):
     """
     Get the rmsd for the hits and attach it to the hits df
 
     default is to use the super full atom rmsd
     """
+    # print(len(hits_df))
     ideal_poses = [
         value_to_pose(
             value,
@@ -91,11 +107,12 @@ def process_hits_by_rmsd(
             *data_table_fields,
             residue_type_name=name,
         )
-        for value, name in zip(hits_df["value"], hits_df["res_type_name"])
+        for value, name in zip(values, hits_df["res_type_name"])
     ]
     pose_pairs = zip(hits_df["rot_pose"].copy(), ideal_poses)
     hits_df["rmsd_to_ideal"] = pd.Series(
-        [rotamer_rmsd(*pair, super=super) for pair in pose_pairs]
+        [float(rotamer_rmsd(*pair, super=super)) for pair in pose_pairs],
+        dtype=np.float64,
     )
 
     rmsd_to_ideal_df = hits_df
@@ -130,7 +147,7 @@ def process_misses(misses_df, data_table, *rotamer_fields):
     miss_rmsd = [
         rotamer_rmsd(
             pose,
-            get_rotamer_pose(
+            get_rotamer_pose_from_name(
                 restype_chis[0],
                 *chi_data[nearest_chi_tree.query(restype_chis[1:])[1]],
             ),
@@ -168,13 +185,15 @@ def test_hash_table(
         *[
             (
                 rot_info[0],
-                get_rotamer_pose(rot_info[0], *rot_info[1:]),
+                get_rotamer_pose_from_name(rot_info[0], *rot_info[1:]),
                 rt,
                 tuple(rot_info[1:]),
             )
             for rot_info in test_data
             for rt in phospho_residue_inverse_rotamer_rts(
-                get_rotamer_residue_from_name(rot_info[0])
+                set_rotamer_chis(
+                    get_rotamer_residue_from_name(rot_info[0]), *rot_info[1:]
+                )
             )
         ]
     )
@@ -183,6 +202,7 @@ def test_hash_table(
 
     test_keys = binner.get_bin_index(np.array(rts))
     hits_mask = table.contains(test_keys)
+    # print (any(hits_mask))
     miss_mask = hits_mask == False
     all_results_df = pd.DataFrame(
         {
@@ -199,11 +219,13 @@ def test_hash_table(
     hits_keys = hits_df["key"].copy()
     if data_table is None:
         pd.read_json(data_table_path)
-    hits_df["value"] = pd.Series(table[np.array(hits_keys)])
+    values = pd.Series(table[np.array(hits_keys)], dtype=np.dtype("i8"))
+    # print (values)
     misses_df = all_results_df[miss_mask].copy()
 
     hits = process_hits_by_rmsd(
         hits_df,
+        values,
         data_table,
         data_table_index_conversion,
         *data_table_rotamer_fields,
