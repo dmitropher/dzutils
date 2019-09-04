@@ -63,7 +63,7 @@ def residues_by_name(pose, *names, include_res=False):
 
 def get_rotamer_pose_from_residue_type(residue_type, *chis):
     pose = pyrosetta.rosetta.core.pose.Pose()
-    residue = _pyr.core.conformation.Residue(residue_type)
+    residue = _pyr.core.conformation.Residue(residue_type, True)
     pose.append_residue_by_bond(residue)
     for i, chi in enumerate(chis, 1):
         pose.set_chi(i, 1, chi)
