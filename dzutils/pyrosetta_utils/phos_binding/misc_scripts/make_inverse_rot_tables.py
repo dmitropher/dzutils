@@ -27,6 +27,17 @@ from dzutils.pyrosetta_utils.geometry.pose_xforms import (
 )
 
 
+def mask_lists(mask, *lists):
+    new_list_tuples = zip(*compress(zip(*lists), mask))
+    return [list(tuple) for tuple in new_list_tuples]
+
+
+def pose_from_res(res):
+    pose = pyrosetta.rosetta.core.pose.Pose()
+    pose.append_residue_by_bond(res)
+    return pose
+
+
 def save_table_as_json(out_dir, table, overwrite=False):
     """
     """
@@ -92,12 +103,14 @@ def generate_rosetta_rotamer_chis(res_type):
 @click.option("-d", "--angstrom-dist-res", default=1.0)
 @click.option("-r", "--run-name", default="inverse_ptr_exchi7_rotamers")
 @click.option("-e", "--erase/--no-erase", default=False)
+@click.option("-m", "--metrics-out-dir", default=False)
 def main(
     run_name="inverse_ptr_exchi7_rotamers",
     res_out_dir="",
     angstrom_dist_res=1,
     angle_res=15,
     erase=False,
+    metrics_out_dir=False,
 ):
     pyrosetta.init(
         """-out:level 100
@@ -114,50 +127,26 @@ def main(
         "TYR",
         variant=pyrosetta.rosetta.core.chemical.VariantType.PHOSPHORYLATION,
     )
-    # rots = [
-    #     rot
-    #     for rot in pyr.core.pack.rotamer_set.bb_independent_rotamers(res_type)
-    # ]
 
     binner = xb(cart_resl=angstrom_dist_res, ori_resl=angle_res)
-    # rt_dicts = []
-    chis, poses = generate_rosetta_rotamer_chis(res_type)
+
+    chis, residues = generate_rosetta_rotamer_chis(res_type)
     if res_out_dir:
         if not isdir(res_out_dir):
             makedirs(res_out_dir)
 
-        for i, pose in enumerate(poses, 1):
-            pose.dump_pdb(
+        for i, res in enumerate(residues, 1):
+            pose_from_res(res).dump_pdb(
                 f"{res_out_dir}/{res_type.name3().lower()}_rotamer_{i}.pdb"
             )
-        # rt_dicts = [
-        #     {
-        #         "key_int": ,
-        #         "chis": [rot.chi(chi) for chi in range(1, rot.nchi() + 1)],
-        #         "file": dump_residue_as_pdb(
-        #             rot,
-        #             f"{res_out_dir}/{res_type.name3().lower()}_rotamer_{i}.pdb",
-        #         ),
-        #     }
-        #     for i, rot in enumerate(rots, 1)
-        #     for rt in phospho_residue_inverse_rotamer_rts(rot)
-        # ]
-    # else:
-    #     rt_dicts = [
-    #         {
-    #             "key_int": binner.get_bin_index(rt),
-    #             "chis": [rot.chi(chi) for chi in range(1, rot.nchi() + 1)],
-    #         }
-    #         for i, rot in enumerate(rots, 1)
-    #         for rt in phospho_residue_inverse_rotamer_rts(rot)
-    #     ]
+    print("debug hardcode! Only tests a tiny amount of rotamers")
     rts, chis_index, alignment_atoms = zip(
         *[
             (rt, chi_set, align)
-            for chi_set, pose in zip(chis, poses)
+            for chi_set, res in zip(chis, residues)
             for rt, align in phospho_residue_inverse_rotamer_rts(
-                pose.residue(1), alignment_atoms=True
-            )
+                res, alignment_atoms=True
+            )[:10]
         ]
     )
     keys = binner.get_bin_index(np.array(rts))
@@ -175,10 +164,12 @@ def main(
     data_name = f"{run_name}_{angstrom_dist_res}_ang_{angle_res}_deg"
     inv_rot_table.name = data_name
 
+    # Make the base dictionary
     key_type = np.dtype("i8")
     value_type = np.dtype("i8")
     gp_dict = gp.Dict(key_type, value_type)
 
+    # build the key value pairs and fill dict
     inv_rot_keys = np.array(inv_rot_table["key_int"], dtype=np.int64)
     inv_rot_vals = np.array(inv_rot_table["index"], dtype=np.int64)
     gp_dict[inv_rot_keys] = inv_rot_vals
@@ -188,10 +179,12 @@ def main(
     # degrees around the orignal value to search
     search_radius = 2
 
+    # The actual jitter-search
     chis_list = list(chis_index)
     new_chis = []
     new_rts = []
     new_atoms = []
+    run_info = []
     for i in range(2, cycle_depth + 2):
         for chis, atoms in zip(chis_list, alignment_atoms):
             for fine_chis in product(
@@ -202,24 +195,33 @@ def main(
             ):
                 new_chis.append(tuple(chis))
                 new_rts.append(
-                    rt_from_chis(*chis, res_type=res_type, atoms=atoms)
+                    rt_from_chis(
+                        *chis, res_type=res_type, alignment_atoms=atoms
+                    )
                 )
 
                 new_atoms.append(atoms)
 
         new_keys = binner.get_bin_index(np.array(rts))
         mask = gp_dict.contains(np.array(new_keys))
-        not_contained = mask == False
+        prev_mask = mask == False
 
-        t1, t2, t3, t4 = zip(
-            *compress(
-                zip(new_chis, new_keys, new_atoms, new_rts), not_contained
-            )
+        #
+        # t1, t2, t3, t4 = zip(
+        #     *compress(
+        #         zip(new_chis, new_keys, new_atoms, new_rts), prev_mask
+        #     )
+        # )
+        # new_chis = list(t1)
+        # new_keys = list(t2)
+        # new_atoms = list(t3)
+        # new_rts = list(t4)
+        new_chis, new_keys, new_atoms, new_rts = mask_lists(
+            mask, new_chis, new_keys, new_atoms, new_rts
         )
-        new_chis = list(t1)
-        new_keys = list(t2)
-        new_atoms = list(t3)
-        new_rts = list(t4)
+        prev_chis, prev_keys, prev_atoms, prev_rts = mask_lists(
+            prev_mask, new_chis, new_keys, new_atoms, new_rts
+        )
         new_table = pd.DataFrame(
             {
                 "key_int": new_keys,
@@ -228,6 +230,21 @@ def main(
                 "rt": new_rts,
             }
         )
+
+        prev_table = pd.DataFrame(
+            {
+                "key_int": prev_keys,
+                "chis": prev_chis,
+                "alignment_atoms": prev_atoms,
+                "rt": prev_rts,
+            }
+        )
+        if metrics_out_dir:
+            prev_table.name = f"{run_name}_cycle_{cycle_depth}_search_{search_radius}_prev_hits.json"
+            new_table.name = f"{run_name}_cycle_{cycle_depth}_search_{search_radius}_new_hits.json"
+            save_table_as_json(metrics_out_dir, prev_table)
+            save_table_as_json(metrics_out_dir, new_table)
+
         new_table = pd.concat(inv_rot_table, new_table)
         new_table = new_table.reset_index(drop=True)
         inv_rot_table = new_table
@@ -235,8 +252,10 @@ def main(
         np_new_keys = np.array(inv_rot_table["key_int"], dtype=np.int64)
         np_new_vals = np.array(inv_rot_table["index"], dtype=np.int64)
         gp_dict[np_new_keys] = np_new_vals
-    """
+        chis = new_chis
+        atoms = new_atoms
 
+    """
     data_out_path = f"{data_store_path}/{inv_rot_table.name}.json"
     if not erase:
         assert bool(
@@ -262,7 +281,6 @@ def main(
         ), "Dict with this name already exists"
     gp_dict.dump(dict_out_path)
     """
-
     save_dict_as_bin(dict_out_dir, gp_dict)
 
 
