@@ -61,6 +61,26 @@ def residues_by_name(pose, *names, include_res=False):
         ]
 
 
+def get_rotamer_pose_from_residue_type(residue_type, *chis):
+    pose = pyrosetta.rosetta.core.pose.Pose()
+    residue = _pyr.core.conformation.Residue(residue_type)
+    pose.append_residue_by_bond(residue)
+    for i, chi in enumerate(chis, 1):
+        pose.set_chi(i, 1, chi)
+    rotamer_pose = pose
+    return rotamer_pose
+
+
+def get_rotamer_pose_from_name(residue_type, *chis, variant=None):
+    pose = pyrosetta.rosetta.core.pose.Pose()
+    residue = residue_from_name3(residue_type, variant=variant)
+    pose.append_residue_by_bond(residue)
+    for i, chi in enumerate(chis, 1):
+        pose.set_chi(i, 1, chi)
+    rotamer_pose = pose
+    return rotamer_pose
+
+
 def atom_distance(a1, a2):
     """
     Takes rosetta atoms, returns the norm of a1 - a2
@@ -222,6 +242,7 @@ def build_hbond_set(
     pose.update_residue_neighbors()
     hbond_set.setup_for_residue_pair_energies(pose, False, False)
     return hbond_set
+
 
 def hbond_to_residue(pose, resnum, hbond_set=None, vec=False):
     """

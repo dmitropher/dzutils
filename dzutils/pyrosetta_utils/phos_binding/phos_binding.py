@@ -162,7 +162,7 @@ def loops_to_rt_dict(pose, plus=0, minus=0):
     ]
 
 
-def phospho_residue_inverse_rotamer_rts(residue):
+def phospho_residue_inverse_rotamer_rts(residue, alignment_atoms=False):
     """
     Returns the RTs from the phos group to bb
 
@@ -182,6 +182,8 @@ def phospho_residue_inverse_rotamer_rts(residue):
     pose.append_residue_by_bond(residue)
     return [
         generate_pose_rt_between_res(pose.clone(), 1, 1, base)
+        if not alignment_atoms
+        else (generate_pose_rt_between_res(pose.clone(), 1, 1, base), base)
         for base in possible_rt_bases
     ]
 
