@@ -27,6 +27,19 @@ def residue_type_from_name3(name, variant=None):
         return rts.name_map(name)
 
 
+def make_pack_rotamers_mover(pose, score_function, *task_ops):
+    """
+    Takes a pose, score function, and any number of task operations, and returns a PackRotamers mover
+    """
+    task_factory = pyrosetta.rosetta.core.pack.task.TaskFactory()
+    for task_op in task_ops:
+        task_factory.push_back(task_op)
+    packer_task = task_factory.create_task_and_apply_taskoperations(pose)
+    return pyrosetta.rosetta.protocols.minimization_packing.PackRotamersMover(
+        score_function, packer_task
+    )
+
+
 def residue_from_name3(name, variant=None):
     return _pyr.core.conformation.Residue(
         residue_type_from_name3(name, variant), True
