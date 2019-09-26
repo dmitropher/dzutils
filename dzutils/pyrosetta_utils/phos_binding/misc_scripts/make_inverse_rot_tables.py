@@ -1,6 +1,8 @@
 from os import makedirs
 from os.path import isfile, isdir
+import sys
 from itertools import product, compress
+import logging
 
 import click
 
@@ -119,11 +121,16 @@ def generate_rosetta_rotamer_chis(res_type):
     )
 
 
-def update_df_and_gp_dict(df, hashmap, new_chis, new_keys, new_atoms, new_rts):
+def update_df_and_gp_dict(
+    df, hashmap, cycle, new_chis, new_keys, new_atoms, new_rts
+):
     """
     Updates df and hashmap, returns ref to both
     """
-    mask = hashmap.contains(np.array(new_keys))
+    mask = hashmap.contains(np.array(new_keys)) == False
+    print("mask generated for batch")
+    print(str(mask))
+    print(f"all: {all(mask)} any: {any(mask)}")
     if any(mask):
         new_chis_masked, new_keys_masked, new_atoms_masked, new_rts_masked = mask_lists(
             mask, new_chis, new_keys, new_atoms, new_rts
@@ -133,10 +140,11 @@ def update_df_and_gp_dict(df, hashmap, new_chis, new_keys, new_atoms, new_rts):
             "chis": new_chis_masked,
             "alignment_atoms": new_atoms_masked,
             "rt": new_rts_masked,
+            "cycle": [cycle] * len(new_chis_masked),
         }
 
-        new_df = merge_data_to_table(hashmap, **new_data)
-        update_hashmap_from_df(hashmap, new_data, "key_int", "index")
+        new_df = merge_data_to_table(df, df.name, **new_data)
+        update_hashmap_from_df(hashmap, new_df, "key_int", "index")
         return new_df, hashmap
     return df, hashmap
 
@@ -156,6 +164,7 @@ def main(
     erase=False,
     metrics_out_dir=False,
 ):
+
     pyrosetta.init(
         """-out:level 100
         -packing:extrachi_cutoff 0
@@ -189,7 +198,7 @@ def main(
             pose_from_res(res).dump_pdb(
                 f"{res_out_dir}/{res_type.name3().lower()}_rotamer_{i}.pdb"
             )
-    print("danger hardcode to reduce rots")
+    # print("danger hardcode to reduce rots")
     rts, chis_index, alignment_atoms = zip(
         *[
             (rt, chi_set, align)
@@ -197,7 +206,7 @@ def main(
             for rt, align in phospho_residue_inverse_rotamer_rts(
                 res, alignment_atoms=True
             )
-        ][:100]
+        ]
     )
     keys = binner.get_bin_index(np.array(rts))
 
@@ -211,6 +220,7 @@ def main(
         }
     )
     inv_rot_table["index"] = inv_rot_table.index
+    inv_rot_table["cycle"] = pd.Series([1] * len(inv_rot_table.index))
     data_name = f"{run_name}_{angstrom_dist_res}_ang_{angle_res}_deg"
     inv_rot_table.name = data_name
 
@@ -226,56 +236,60 @@ def main(
 
     # Max granularity to go to
     granularity_factor = 5
-    cycle_depth = 1
+    cycle_depth = 6
     # degrees around the orignal value to search
-    search_radius = 1
+    search_radius = 3
 
     # The actual jitter-search
-    chis_list = list(chis_index)
-    new_chis = []
-    new_rts = []
-    new_atoms = []
-    # run_info = []
+
     for i in range(1, cycle_depth + 1):
+        batch_factor = 500
+        count = 0
+        batch_new_chis = []
+        batch_new_atoms = []
+        batch_new_rts = []
+        # cycles = 0
         for chis, atoms in zip(
-            inv_rot_table["chis"].to_list,
-            inv_rot_table["alignment_atoms"].to_list,
+            inv_rot_table[inv_rot_table["cycle"] == i]["chis"].to_list(),
+            inv_rot_table[inv_rot_table["cycle"] == i][
+                "alignment_atoms"
+            ].to_list(),
         ):
-            batch_factor = 1000
-            count = 0
-            batch_new_chis = []
-            batch_new_atoms = []
-            batch_new_rts = []
 
             for fine_chis in product(
                 *[
                     np.linspace(
-                        chi - search_radius,
-                        chi + search_radius,
+                        chi_val - search_radius,
+                        chi_val + search_radius,
                         i * granularity_factor,
                     )
-                    for chi in chis
+                    for chi_val in chis
                 ]
             ):
-                batch_new_chis.append(tuple(chis))
-                batch_new_atoms.append(
+                batch_new_chis.append(tuple(fine_chis))
+                batch_new_rts.append(
                     np.array(
                         rt_from_chis(
-                            *chis, res_type=res_type, alignment_atoms=atoms
+                            *fine_chis,
+                            res_type=res_type,
+                            alignment_atoms=atoms,
                         )
                     )
                 )
-
-                batch_new_rts.append(atoms)
+                batch_new_atoms.append(atoms)
                 if count > batch_factor:
+                    # cycles +=1
+                    # if cycles > 5:
+                    #     sys.exit()
+                    print(f"batch: {count} exceeds factor: {batch_factor}")
                     count = -1
                     batch_new_keys = binner.get_bin_index(
                         np.array(batch_new_rts)
                     )
-
                     inv_rot_table, gp_dict = update_df_and_gp_dict(
                         inv_rot_table,
                         gp_dict,
+                        i,
                         batch_new_chis,
                         batch_new_keys,
                         batch_new_atoms,
@@ -286,6 +300,18 @@ def main(
                     batch_new_rts = []
 
                 count += 1
+        if any([batch_new_chis, batch_new_atoms, batch_new_rts]):
+            batch_new_keys = binner.get_bin_index(np.array(batch_new_rts))
+            logging.debug("new keys made")
+            inv_rot_table, gp_dict = update_df_and_gp_dict(
+                inv_rot_table,
+                gp_dict,
+                i,
+                batch_new_chis,
+                batch_new_keys,
+                batch_new_atoms,
+                batch_new_rts,
+            )
 
     db_path = (
         "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables"
