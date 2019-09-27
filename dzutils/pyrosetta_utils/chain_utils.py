@@ -26,8 +26,14 @@ def pose_from_chain(pose, chain):
     """
     return pose.split_by_chain()[chain]
 
-def chain_of(pose,resnum):
-    return [num for num in range(1,pose.num_chains() + 1) if resnum <= pose.chain_end(num) and resnum >= pose.chain_begin(num) ][0]
+
+def chain_of(pose, resnum):
+    return [
+        num
+        for num in range(1, pose.num_chains() + 1)
+        if resnum <= pose.chain_end(num) and resnum >= pose.chain_begin(num)
+    ][0]
+
 
 # this is broken, chain_begin returns the first res of the chain_num
 # def posnum_in_chain(pose, resnum):
@@ -36,7 +42,31 @@ def chain_of(pose,resnum):
 #
 #     sometimes i wanna keep track of stuff when i split by chain ok
 #     """
-#     return resnum - pose.chain_begin(resnum) + 1
+#     return resnum - pose.chain_begin(resnum) + 1s
+
+
+def clear_termini(pose):
+    """
+    clears all termini from the given pose
+    """
+    for i, res in enumerate(pose.resiudes, 1):
+        if res.has_variant_type(
+            _pyrosetta.rosetta.core.chemical.LOWER_TERMINUS_VARIANT
+        ):
+            _pyrosetta.rosetta.core.pose.remove_variant_type_from_pose_residue(
+                pose,
+                _pyrosetta.rosetta.core.chemical.LOWER_TERMINUS_VARIANT,
+                i,
+            )
+        if res.has_variant_type(
+            _pyrosetta.rosetta.core.chemical.UPPER_TERMINUS_VARIANT
+        ):
+            _pyrosetta.rosetta.core.pose.remove_variant_type_from_pose_residue(
+                pose,
+                _pyrosetta.rosetta.core.chemical.UPPER_TERMINUS_VARIANT,
+                i,
+            )
+    return pose
 
 
 def add_cut(pose, index, new_pose=False):
@@ -91,7 +121,31 @@ def link_poses(*poses, rechain=False):
             target.append_pose_by_jump(pose, 1)
         # target.conformation().chains_from_termini()
     else:
+        if target.residues[-1].has_variant_type(
+            _pyrosetta.rosetta.core.chemical.UPPER_TERMINUS_VARIANT
+        ) and (len(poses) - 1):
+            _pyrosetta.rosetta.core.pose.remove_variant_type_from_pose_residue(
+                target,
+                _pyrosetta.rosetta.core.chemical.UPPER_TERMINUS_VARIANT,
+                len(target.residues),
+            )
         for pose in poses[1:]:
+            if target.residues[-1].has_variant_type(
+                _pyrosetta.rosetta.core.chemical.UPPER_TERMINUS_VARIANT
+            ):
+                _pyrosetta.rosetta.core.pose.remove_variant_type_from_pose_residue(
+                    target,
+                    _pyrosetta.rosetta.core.chemical.UPPER_TERMINUS_VARIANT,
+                    len(target.residues),
+                )
+            if pose.residues[1].has_variant_type(
+                _pyrosetta.rosetta.core.chemical.LOWER_TERMINUS_VARIANT
+            ):
+                _pyrosetta.rosetta.core.pose.remove_variant_type_from_pose_residue(
+                    pose,
+                    _pyrosetta.rosetta.core.chemical.LOWER_TERMINUS_VARIANT,
+                    1,
+                )
             _pyrosetta.rosetta.core.pose.append_pose_to_pose(
                 target, pose, False
             )
@@ -362,8 +416,7 @@ def serial_deletions(pose, target, terminus=None):
         ]
 
 
-def run_direct_segment_lookup(
-    pose,
+def segment_lookup_mover(
     label="naive_loop",
     database="/home/fordas/databases/vall.json",
     length=5,
@@ -391,8 +444,30 @@ def run_direct_segment_lookup(
         segment_lookup_mover.label_insertion(label)
     segment_lookup_mover.lookup_config(config)
     segment_lookup_mover.structure_store_path(database)
-    segment_lookup_mover.apply(pose)
     return segment_lookup_mover
+
+
+def run_direct_segment_lookup(
+    pose,
+    label="naive_loop",
+    database="/home/fordas/databases/vall.json",
+    length=5,
+    rmsd_tol=0.5,
+    cluster_tol=1.75,
+    from_chain=1,
+    to_chain=2,
+):
+    """
+    Wrapper for direct segment lookup mover
+
+    Exists to make code more concise and set some defaults that
+    made sense at the time
+    """
+    mover = segment_lookup_mover(
+        label, database, length, rmsd_tol, cluster_tol, from_chain, to_chain
+    )
+    mover.apply(pose)
+    return mover
 
 
 def circular_permute(pose, position, many_loops=False, **kwargs):

@@ -1,13 +1,23 @@
 import numpy as _np
+
+from pyrosetta.rosetta.core.kinematics import RT
+
 from dzutils.pyrosetta_utils.geometry.homog import (
     stub_to_homog as _stub_to_homog,
 )
+from dzutils.pyrosetta_utils.geometry.homog import (
+    homog_relative_transform,
+    homog_from_residue,
+    rt_to_homog,
+)
+
 from dzutils.pyrosetta_utils.geometry.homog import (
     homog_relative_transform as _stubs_to_rt,
 )
 from dzutils.pyrosetta_utils.geometry.rt_utils import (
     stub_from_residue as _stub_from_residue,
 )
+from dzutils.pyrosetta_utils.geometry.rt_utils import rt_from_res_atom_sets
 import pyrosetta.rosetta as _pyr
 
 # import dzutils.func_utils.MultiMethod as MultiMethod
@@ -193,15 +203,27 @@ class RotamerRTArray(_np.ndarray):
     """
 
     def __new__(
-        cls, residue=None, base_atoms=("N", "CA", "C"), target_atoms=None
+        cls,
+        residue=None,
+        base_atoms=("CA", "N", "CA", "C"),
+        target_atoms=None,
+        inverse=False,
     ):
         # make the rt from base to target atoms, store it as the 2d array
-        obj = _np.asarray(
-            _stubs_to_rt(
-                _stub_to_homog(_stub_from_residue(residue, *base_atoms)),
-                _stub_to_homog(_stub_from_residue(residue, *target_atoms)),
-            )
-        ).view(cls)
+        if not inverse:
+            obj = _np.asarray(
+                homog_relative_transform(
+                    homog_from_residue(residue, *(base_atoms)),
+                    homog_from_residue(residue, *(target_atoms)),
+                )
+            ).view(cls)
+        else:
+            obj = _np.asarray(
+                homog_relative_transform(
+                    homog_from_residue(residue, *(target_atoms)),
+                    homog_from_residue(residue, *(base_atoms)),
+                )
+            ).view(cls)
         # generate a blank pose and add our residue into it
         # Residue objects don't update xyz with chi, this is sort of a hack to
         # avoid reimplementing internal coordinate stuff
@@ -211,6 +233,10 @@ class RotamerRTArray(_np.ndarray):
         obj.residue = res
         obj._target_atoms = target_atoms
         obj._base_atoms = base_atoms
+        obj._inverse = inverse
+        obj._mask = _np.ones_like(obj)
+        obj._cached_base_stub = _stub_from_residue(residue, *(base_atoms))
+        obj._cached_base_atoms = base_atoms
         return obj
 
     def __array_finalize__(self, obj):
@@ -219,6 +245,10 @@ class RotamerRTArray(_np.ndarray):
         self.residue = getattr(obj, "residue", None)
         self._target_atoms = getattr(obj, "_target_atoms", None)
         self._base_atoms = getattr(obj, "_base_atoms", None)
+        self._inverse = getattr(obj, "_inverse", None)
+        self._mask = getattr(obj, "_mask", None)
+        self._cached_base_stub = getattr(obj, "_cached_base_stub", None)
+        self._cached_base_atoms = getattr(obj, "_cached_base_atoms", None)
 
     def __reduce__(self):
         # Get the parent's __reduce__ tuple
@@ -228,34 +258,91 @@ class RotamerRTArray(_np.ndarray):
             self.get_pose(),
             self._target_atoms,
             self._base_atoms,
+            self._inverse,
+            self._mask,
         )
         return (pickled_state[0], pickled_state[1], new_state)
 
     def __setstate__(self, state):
-        self._base_atoms = state[-1]  # Set our attributes
-        self._target_atoms = state[-2]
-        self.residue = state[-3].residue(1)
+        self._mask = state[-1]
+        self._inverse = state[-2]
+        self._base_atoms = state[-3]  # Set our attributes
+        self._target_atoms = state[-5]
+        self.residue = state[-5].residue(1)
         # Call the parent's __setstate__ with the other tuple elements.
-        super(RotamerRTArray, self).__setstate__(state[0:-3])
+        super(RotamerRTArray, self).__setstate__(state[0:-5])
 
-    def _recompute_xform(self):
+    # def _recompute_xform(self):
+    #     """
+    #     Utility function for when the chis are reset
+    #     """
+    #     _np.place(
+    #         self,
+    #         _np.ones_like(self),
+    #         _np.asarray(
+    #             homog_relative_transform(
+    #                 homog_from_residue(self.residue,
+    #                     *(
+    #                             self._target_atoms
+    #                             if self._inverse
+    #                             else self._base_atoms
+    #
+    #                     )
+    #                 ),
+    #                 homog_from_residue(self.residue,
+    #                     *(
+    #                             self._base_atoms
+    #                             if self._inverse
+    #                             else self._target_atoms
+    #                         )
+    #                 ),
+    #             )
+    #         ),
+    #     )
+    def _recompute_xform(self, cached_base=None):
         """
         Utility function for when the chis are reset
         """
-        _np.place(
-            self,
-            _np.ones_like(self),
-            _np.asarray(
-                _stubs_to_rt(
-                    _stub_to_homog(
-                        _stub_from_residue(self.residue, *self._base_atoms)
-                    ),
-                    _stub_to_homog(
-                        _stub_from_residue(self.residue, *self._target_atoms)
-                    ),
-                )
-            ),
-        )
+        if cached_base is not None:
+            assert self._base_atoms == self._cached_base_atoms
+            # base = (
+            #     cached_base
+            #     if cached_base is not None
+            #     else _stub_from_residue(self.residue, *self._base_atoms)
+            # )
+            target = _stub_from_residue(self.residue, *self._target_atoms)
+            rt = (
+                RT(target, cached_base)
+                if self._inverse
+                else RT(cached_base, target)
+            )
+            _np.place(self, self._mask, _np.asarray(rt_to_homog(rt)))
+            return
+        else:
+            base = _stub_from_residue(self.residue, *self._base_atoms)
+            if self._base_atoms != self._cached_base_atoms:
+                self._cached_base_atoms = self._base_atoms
+                self._cached_base_stub = base
+            target = _stub_from_residue(self.residue, *self._target_atoms)
+            rt = RT(target, base) if self._inverse else RT(base, target)
+            _np.place(self, self._mask, _np.asarray(rt_to_homog(rt)))
+            return
+        # rt = (
+        #     rt_from_res_atom_sets(
+        #         self.residue,
+        #         self.residue,
+        #         *self._target_atoms,
+        #         *self._base_atoms
+        #     )
+        #     if self._inverse
+        #     else rt_from_res_atom_sets(
+        #         self.residue,
+        #         self.residue,
+        #         *self._base_atoms,
+        #         *self._target_atoms
+        #     )
+        # )
+        # _np.place(self, self._mask, _np.asarray(rt_to_homog(rt)))
 
     def set_target_atoms(self, atoms):
         """
@@ -294,6 +381,15 @@ class RotamerRTArray(_np.ndarray):
         self.residue = pose.residue(1)
         self._recompute_xform()
 
+    def reset_rotamer(self, *chis, base_atoms=(), target_atoms=()):
+        for chi_num, chi in enumerate(chis, 1):
+            self.residue.set_chi(chi_num, chi)
+        if base_atoms:
+            self._base_atoms = base_atoms
+        if target_atoms:
+            self._target_atoms = target_atoms
+        self._recompute_xform(cached_base=self._cached_base_stub)
+
     def get_pose(self):
         """
         Returns a pose where the only residue is the chosen residue
@@ -323,6 +419,7 @@ class RotamerRTArray(_np.ndarray):
         """
         Returns the PoseStubArrray for base by default, target otherwise
         """
+        # base = not(self._inverse)
         return PoseStubArray(
             pose=self.get_pose(),
             seqpos=1,

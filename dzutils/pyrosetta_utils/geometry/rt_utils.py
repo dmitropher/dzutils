@@ -15,6 +15,36 @@ def stub_from_residue(
     )
 
 
+def rt_from_res_atom_sets(
+    start_res,
+    end_res,
+    start_center_atom="CA",
+    start_atom1="N",
+    start_atom2="CA",
+    start_atom3="C",
+    end_center_atom="CA",
+    end_atom1="N",
+    end_atom2="CA",
+    end_atom3="C",
+):
+    """
+    Returns the RT from the start to end res: centers stub around given atoms
+
+    lazy edit of old func I guess that one is deprecated or something
+
+    Defaults to CA as the center atom name, N-CA-C as the plane atoms
+    """
+
+    stub1 = stub_from_residue(
+        start_res, start_center_atom, start_atom1, start_atom2, start_atom3
+    )
+    stub2 = stub_from_residue(
+        end_res, end_center_atom, end_atom1, end_atom2, end_atom3
+    )
+    rt = _pyrosetta.rosetta.core.kinematics.RT(stub1, stub2)
+    return rt
+
+
 def rt_from_res_atoms(
     start_res,
     end_res,
