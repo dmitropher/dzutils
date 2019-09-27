@@ -22,11 +22,20 @@ from dzutils.pyrosetta_utils import (
 
 from dzutils.pyrosetta_utils.phos_binding import (
     phospho_residue_inverse_rotamer_rts,
+    pres_bases,
 )
 
 from dzutils.pyrosetta_utils.geometry.pose_xforms import (
     generate_pose_rt_between_res,
+    RotamerRTArray,
 )
+
+
+def rt_from_chis(rotamer_rt_array, *chis, base_atoms=(), target_atoms=()):
+    rotamer_rt_array.reset_rotamer(
+        *chis, base_atoms=base_atoms, target_atoms=target_atoms
+    )
+    return np.array(rotamer_rt_array)
 
 
 def merge_data_to_table(old_table, name, **new_data):
@@ -34,7 +43,7 @@ def merge_data_to_table(old_table, name, **new_data):
     concats two tables and fixes the index/name
     """
     new_table = pd.DataFrame(new_data)
-    new_table_merged = pd.concat((old_table, new_table))
+    new_table_merged = pd.concat((old_table, new_table), sort=False)
     new_table_merged = new_table_merged.reset_index(drop=True)
     new_table_merged["index"] = new_table_merged.index
     new_table_merged.name = old_table.name
@@ -88,12 +97,12 @@ def save_dict_as_bin(dict_out_dir, gp_dict, dict_name, overwrite=False):
     gp_dict.dump(dict_out_path)
 
 
-def rt_from_chis(*chis, res_type=None, alignment_atoms=()):
-    """
-    rt from the chis given
-    """
-    residue_pose = get_rotamer_pose_from_residue_type(res_type)
-    return generate_pose_rt_between_res(residue_pose, 1, 1, alignment_atoms)
+# def rt_from_chis(*chis, res_type=None, alignment_atoms=()):
+#     """
+#     rt from the chis given
+#     """
+#     residue_pose = get_rotamer_pose_from_residue_type(res_type)
+#     return generate_pose_rt_between_res(residue_pose, 1, 1, alignment_atoms)
 
 
 def dump_residue_as_pdb(residue, path):
@@ -156,6 +165,11 @@ def update_df_and_gp_dict(
 @click.option("-r", "--run-name", default="inverse_ptr_exchi7_rotamers")
 @click.option("-e", "--erase/--no-erase", default=False)
 @click.option("-m", "--metrics-out-dir", default=False)
+@click.option("-b", "--batch-factor", default=10000)
+@click.option("-g", "--granularity-factor", default=15)
+@click.option("-c", "--cycle_depth", default=3)
+@click.option("-s", "--search-radius", default=5)
+# @click.option("-d","--rots-for)
 def main(
     run_name="inverse_ptr_exchi7_rotamers",
     res_out_dir="",
@@ -163,7 +177,20 @@ def main(
     angle_res=15,
     erase=False,
     metrics_out_dir=False,
+    batch_factor=10000,
+    granularity_factor=15,
+    cycle_depth=3,
+    search_radius=5,
 ):
+
+    db_path = (
+        "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables"
+    )
+    table_out_dir = f"{db_path}/inverse_rotamer/tables"
+    data_name = f"{run_name}_{angstrom_dist_res}_ang_{angle_res}_deg"
+
+    # save_table_as_json(table_out_dir, inv_rot_table, overwrite=erase)
+    dict_out_dir = f"{db_path}/inverse_rotamer/dicts/"
 
     pyrosetta.init(
         """-out:level 100
@@ -199,13 +226,23 @@ def main(
                 f"{res_out_dir}/{res_type.name3().lower()}_rotamer_{i}.pdb"
             )
     # print("danger hardcode to reduce rots")
+    residue = pyrosetta.rosetta.core.conformation.Residue(res_type, True)
+    possible_rt_bases = pres_bases(residue)
+    # pose = _pyrosetta.rosetta.core.pose.Pose()
+    # pose.append_residue_by_bond(residue)
+    rotamer_rt = RotamerRTArray(
+        residue=residue, target_atoms=("P", "P", "OH", "O2P"), inverse=True
+    )
+
     rts, chis_index, alignment_atoms = zip(
         *[
-            (rt, chi_set, align)
-            for chi_set, res in zip(chis, residues)
-            for rt, align in phospho_residue_inverse_rotamer_rts(
-                res, alignment_atoms=True
+            (
+                rt_from_chis(rotamer_rt, *chi_set, target_atoms=atoms),
+                chi_set,
+                atoms,
             )
+            for chi_set, res in zip(chis, residues)
+            for atoms in possible_rt_bases
         ]
     )
     keys = binner.get_bin_index(np.array(rts))
@@ -235,15 +272,17 @@ def main(
     gp_dict[inv_rot_keys] = inv_rot_vals
 
     # Max granularity to go to
-    granularity_factor = 5
-    cycle_depth = 6
+    # granularity_factor = 25
+    # cycle_depth = 3
     # degrees around the orignal value to search
-    search_radius = 3
+    # search_radius = 5
 
     # The actual jitter-search
-
+    # rotamer_rt = RotamerRTArray(
+    #     residue=pyrosetta.rosetta.core.conformation.Residue(res_type, True),target_atoms=("P","P","OH","O2P")
+    # )
     for i in range(1, cycle_depth + 1):
-        batch_factor = 500
+        # batch_factor = 1000
         count = 0
         batch_new_chis = []
         batch_new_atoms = []
@@ -267,20 +306,14 @@ def main(
                 ]
             ):
                 batch_new_chis.append(tuple(fine_chis))
+                # rotamer_rt.set_target_atoms(atoms)
+                # rotamer_rt.set_all_chi(*fine_chis)
                 batch_new_rts.append(
-                    np.array(
-                        rt_from_chis(
-                            *fine_chis,
-                            res_type=res_type,
-                            alignment_atoms=atoms,
-                        )
-                    )
+                    rt_from_chis(rotamer_rt, *fine_chis, target_atoms=atoms)
                 )
                 batch_new_atoms.append(atoms)
                 if count > batch_factor:
-                    # cycles +=1
-                    # if cycles > 5:
-                    #     sys.exit()
+
                     print(f"batch: {count} exceeds factor: {batch_factor}")
                     count = -1
                     batch_new_keys = binner.get_bin_index(
@@ -294,6 +327,14 @@ def main(
                         batch_new_keys,
                         batch_new_atoms,
                         batch_new_rts,
+                    )
+                    data_name = f"{run_name}_{angstrom_dist_res}_ang_{angle_res}_deg_cycle_{i}"
+                    inv_rot_table.name = data_name
+                    save_table_as_json(
+                        table_out_dir, inv_rot_table, overwrite=erase
+                    )
+                    save_dict_as_bin(
+                        dict_out_dir, gp_dict, data_name, overwrite=erase
                     )
                     batch_new_chis = []
                     batch_new_atoms = []
@@ -312,7 +353,12 @@ def main(
                 batch_new_atoms,
                 batch_new_rts,
             )
-
+            data_name = (
+                f"{run_name}_{angstrom_dist_res}_ang_{angle_res}_deg_cycle_{i}"
+            )
+            inv_rot_table.name = data_name
+            save_table_as_json(table_out_dir, inv_rot_table, overwrite=erase)
+            save_dict_as_bin(dict_out_dir, gp_dict, data_name, overwrite=erase)
     db_path = (
         "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables"
     )

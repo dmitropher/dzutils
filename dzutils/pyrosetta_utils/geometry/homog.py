@@ -3,6 +3,7 @@ import math as _math
 from dzutils.pyrosetta_utils.geometry.rt_utils import (
     stub_from_residue as _stub_from_residue,
 )
+
 from pyrosetta.rosetta.numeric import xyzVector_double_t, xyzMatrix_double_t
 from pyrosetta.rosetta.core.kinematics import Stub
 

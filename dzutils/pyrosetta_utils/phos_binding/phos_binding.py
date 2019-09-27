@@ -6,6 +6,7 @@ from xbin import XformBinner as _xb
 from dzutils.pyrosetta_utils.geometry.pose_xforms import (
     get_e2e_xform,
     generate_pose_rt_between_res,
+    RotamerRTArray,
 )
 
 from dzutils.pyrosetta_utils.geometry.superposition_utilities import (
@@ -162,6 +163,17 @@ def loops_to_rt_dict(pose, plus=0, minus=0):
     ]
 
 
+def pres_bases(residue):
+    phos_atoms = atom_indices_with_element(residue, "P")
+    return [
+        (p_atom_index, p_atom_index, a, b)
+        for p_atom_index in phos_atoms
+        for (a, b) in permutations(
+            bonded_atoms(residue, p_atom_index, name=False), 2
+        )
+    ]
+
+
 def phospho_residue_inverse_rotamer_rts(residue, alignment_atoms=False):
     """
     Returns the RTs from the phos group to bb
@@ -170,20 +182,17 @@ def phospho_residue_inverse_rotamer_rts(residue, alignment_atoms=False):
 
     (Phosphorus atom, Phosphorus Atom, p-bound-atom1,p-bound-atom2)
     """
-    phos_atoms = atom_indices_with_element(residue, "P")
-    possible_rt_bases = [
-        (p_atom_index, p_atom_index, a, b)
-        for p_atom_index in phos_atoms
-        for (a, b) in permutations(
-            bonded_atoms(residue, p_atom_index, name=False), 2
-        )
-    ]
-    pose = _pyrosetta.rosetta.core.pose.Pose()
-    pose.append_residue_by_bond(residue)
+    # phos_atoms = atom_indices_with_element(residue, "P")
+    possible_rt_bases = pres_bases(residue)
+    # pose = _pyrosetta.rosetta.core.pose.Pose()
+    # pose.append_residue_by_bond(residue)
     return [
-        generate_pose_rt_between_res(pose.clone(), 1, 1, base)
+        RotamerRTArray(residue=residue, target_atoms=base, inverse=True)
         if not alignment_atoms
-        else (generate_pose_rt_between_res(pose.clone(), 1, 1, base), base)
+        else (
+            RotamerRTArray(residue=residue, target_atoms=base, inverse=True),
+            base,
+        )
         for base in possible_rt_bases
     ]
 
