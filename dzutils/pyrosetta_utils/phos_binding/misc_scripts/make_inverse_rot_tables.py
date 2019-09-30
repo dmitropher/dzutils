@@ -31,6 +31,57 @@ from dzutils.pyrosetta_utils.geometry.pose_xforms import (
 )
 
 
+def cartesian(arrays, out=None):
+    """
+    Generate a cartesian product of input arrays.
+
+    Parameters
+    ----------
+    arrays : list of array-like
+        1-D arrays to form the cartesian product of.
+    out : ndarray
+        Array to place the cartesian product in.
+
+    Returns
+    -------
+    out : ndarray
+        2-D array of shape (M, len(arrays)) containing cartesian products
+        formed of input arrays.
+
+    Examples
+    --------
+    >>> cartesian(([1, 2, 3], [4, 5], [6, 7]))
+    array([[1, 4, 6],
+           [1, 4, 7],
+           [1, 5, 6],
+           [1, 5, 7],
+           [2, 4, 6],
+           [2, 4, 7],
+           [2, 5, 6],
+           [2, 5, 7],
+           [3, 4, 6],
+           [3, 4, 7],
+           [3, 5, 6],
+           [3, 5, 7]])
+
+    """
+
+    arrays = [np.asarray(x) for x in arrays]
+    dtype = arrays[0].dtype
+
+    n = np.prod([x.size for x in arrays])
+    if out is None:
+        out = np.zeros([n, len(arrays)], dtype=dtype)
+
+    m = n // arrays[0].size
+    out[:, 0] = np.repeat(arrays[0], m)
+    if arrays[1:]:
+        cartesian(arrays[1:], out=out[0:m, 1:])
+        for j in range(1, arrays[0].size):
+            out[j * m : (j + 1) * m, 1:] = out[0:m, 1:]
+    return out
+
+
 def rt_from_chis(rotamer_rt_array, *chis, base_atoms=(), target_atoms=()):
     rotamer_rt_array.reset_rotamer(
         *chis, base_atoms=base_atoms, target_atoms=target_atoms
@@ -156,6 +207,24 @@ def update_df_and_gp_dict(
         update_hashmap_from_df(hashmap, new_df, "key_int", "index")
         return new_df, hashmap
     return df, hashmap
+
+
+def bit_pack_rotamer(*chis, num_chis=3, round_fraction=0.01):
+    """
+    Converts the given chis to a numpy uint64
+
+    Uses the formula: left shift the value by 64//(num_chis)*(num of chi - 1)
+
+    bitwise or over the list
+    """
+    scaling = 360 / round_fraction
+    if (scaling) > np.power(np.uint64(2), np.uint64(64 // num_chis)):
+        raise ValueError(
+            "given round_fraction and number of chis cannot fit into uint 64"
+        )
+    packed_values = [
+        np.left_shift(np.uint64(), np.uint64()) for i, chi in enumerate(chis)
+    ]
 
 
 @click.command()
@@ -284,18 +353,16 @@ def main(
     for i in range(1, cycle_depth + 1):
         # batch_factor = 1000
         count = 0
+        batch_new_chi_ints = set()
         batch_new_chis = []
         batch_new_atoms = []
-        batch_new_rts = []
+        # batch_new_rts = []
         # cycles = 0
-        for chis, atoms in zip(
-            inv_rot_table[inv_rot_table["cycle"] == i]["chis"].to_list(),
-            inv_rot_table[inv_rot_table["cycle"] == i][
-                "alignment_atoms"
-            ].to_list(),
-        ):
+        for chis in inv_rot_table[inv_rot_table["cycle"] == i][
+            "chis"
+        ].to_list():
 
-            for fine_chis in product(
+            for fine_chis in cartesian(
                 *[
                     np.linspace(
                         chi_val - search_radius,
@@ -305,60 +372,37 @@ def main(
                     for chi_val in chis
                 ]
             ):
-                batch_new_chis.append(tuple(fine_chis))
-                # rotamer_rt.set_target_atoms(atoms)
-                # rotamer_rt.set_all_chi(*fine_chis)
-                batch_new_rts.append(
-                    rt_from_chis(rotamer_rt, *fine_chis, target_atoms=atoms)
+                uint_rot_repr = bit_pack_rotamer(
+                    *fine_chis, num_chis=3, round_fraction=0.01
                 )
-                batch_new_atoms.append(atoms)
-                if count > batch_factor:
+                batch_new_chi_ints.add(uint_rot_repr)
 
-                    print(f"batch: {count} exceeds factor: {batch_factor}")
-                    count = -1
-                    batch_new_keys = binner.get_bin_index(
-                        np.array(batch_new_rts)
-                    )
-                    inv_rot_table, gp_dict = update_df_and_gp_dict(
-                        inv_rot_table,
-                        gp_dict,
-                        i,
-                        batch_new_chis,
-                        batch_new_keys,
-                        batch_new_atoms,
-                        batch_new_rts,
-                    )
-                    data_name = f"{run_name}_{angstrom_dist_res}_ang_{angle_res}_deg_cycle_{i}"
-                    inv_rot_table.name = data_name
-                    save_table_as_json(
-                        table_out_dir, inv_rot_table, overwrite=erase
-                    )
-                    save_dict_as_bin(
-                        dict_out_dir, gp_dict, data_name, overwrite=erase
-                    )
-                    batch_new_chis = []
-                    batch_new_atoms = []
-                    batch_new_rts = []
+        packed_chis = np.fromiter(batch_new_chi_ints, np.uint64)
+        chi_sets = unpack_chis(packed_chis, num_chis=3)
+        # print(f"batch: {count} exceeds factor: {batch_factor}")
+        batch_new_chis, batch_new_rts = [
+            (chis, rt_from_chis(rotamer_rt, *chis, target_atoms=atoms))
+            for chis in chi_sets
+            for atoms in possible_rt_bases
+        ]
+        batch_new_keys = binner.get_bin_index(np.array(batch_new_rts))
 
-                count += 1
-        if any([batch_new_chis, batch_new_atoms, batch_new_rts]):
-            batch_new_keys = binner.get_bin_index(np.array(batch_new_rts))
-            logging.debug("new keys made")
-            inv_rot_table, gp_dict = update_df_and_gp_dict(
-                inv_rot_table,
-                gp_dict,
-                i,
-                batch_new_chis,
-                batch_new_keys,
-                batch_new_atoms,
-                batch_new_rts,
-            )
-            data_name = (
-                f"{run_name}_{angstrom_dist_res}_ang_{angle_res}_deg_cycle_{i}"
-            )
-            inv_rot_table.name = data_name
-            save_table_as_json(table_out_dir, inv_rot_table, overwrite=erase)
-            save_dict_as_bin(dict_out_dir, gp_dict, data_name, overwrite=erase)
+        inv_rot_table, gp_dict = update_df_and_gp_dict(
+            inv_rot_table,
+            gp_dict,
+            i,
+            batch_new_chis,
+            batch_new_keys,
+            batch_new_atoms,
+            batch_new_rts,
+        )
+        data_name = (
+            f"{run_name}_{angstrom_dist_res}_ang_{angle_res}_deg_cycle_{i}"
+        )
+        inv_rot_table.name = data_name
+        save_table_as_json(table_out_dir, inv_rot_table, overwrite=erase)
+        save_dict_as_bin(dict_out_dir, gp_dict, data_name, overwrite=erase)
+
     db_path = (
         "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables"
     )

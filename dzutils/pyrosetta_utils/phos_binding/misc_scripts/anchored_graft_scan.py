@@ -1,6 +1,14 @@
 import json
+import logging
+
 import pyrosetta
 import click
+
+from pyrosetta.rosetta.numeric import xyzVector_double_t as rosetta_vector
+from pyrosetta.rosetta.protocols.toolbox.pose_manipulation import (
+    rigid_body_move,
+)
+from pyrosetta.rosetta.core.select.residue_selector import TrueResidueSelector
 
 from dzutils.pyrosetta_utils.secstruct.structure import (
     parse_structure_from_dssp,
@@ -15,6 +23,14 @@ from dzutils.pyrosetta_utils.chain_utils import (
 )
 
 from dzutils.pyrosetta_utils import run_pyrosetta_with_flags
+
+from dzutils.pyrosetta_utils.geometry.homog import (
+    homog_super_transform_from_residues,
+    np_homog_to_rosetta_rotation_translation,
+)
+
+logger = logging.getLogger("anchored_graft")
+logger.setLevel(logging.DEBUG)
 
 
 def load_pdbs(pdb_list):
@@ -121,8 +137,77 @@ def super_and_graft(
         raise
 
 
-def graft_fragment(pose, fragment, site, begin_only=True):
+def graft(
+    pose, fragment, pose_cut_position, *ligands, margin=3, allow_terminal=False
+):
     """
+    """
+    subpose_after_graft = (
+        pyrosetta.rosetta.protocols.grafting.return_region(
+            pose.clone(), pose_cut_position + 1, len(pose.residues)
+        )
+        if len(pose.residues) > pose_cut_position
+        else pyrosetta.rosetta.core.pose.Pose()
+    )
+    cut_pos = pose_cut_position - margin - 1
+    if cut_pos < 0:
+        if allow_terminal:
+            return link_poses(
+                link_poses(fragment, subpose_after_graft),
+                *ligands,
+                rechain=True,
+            )
+        else:
+            return
+    subpose_before_graft = pyrosetta.rosetta.protocols.grafting.return_region(
+        pose.clone(), 1, cut_pos
+    )
+
+    n_term_half = link_poses(subpose_before_graft, fragment, rechain=True)
+    num_chains = n_term_half.num_chains()
+
+    print(f"segment lookup between chains {num_chains-1} and {num_chains}")
+    segment_lookup_mover = run_direct_segment_lookup(
+        n_term_half, from_chain=num_chains - 1, to_chain=num_chains
+    )
+
+    status = segment_lookup_mover.get_last_move_status()
+    if status != pyrosetta.rosetta.protocols.moves.mstype_from_name(
+        "MS_SUCCESS"
+    ):
+        print("mover status: ", status)
+
+        return
+
+    if not len(subpose_after_graft.residues):
+        print("aligned to last res, not linking subpose after graft")
+        if ligands:
+            return link_poses(n_term_half, *ligands, rechain=True)
+        else:
+            return n_term_half
+    print("linking n_term half and c term half")
+    n_term_chains = [chain for chain in n_term_half.split_by_chain()]
+    c_term_chains = [chain for chain in subpose_after_graft.split_by_chain()]
+
+    n_term_final = n_term_chains[-1]
+    c_term_first = c_term_chains[0]
+    grafted_chain = link_poses(n_term_final, c_term_first, rechain=False)
+
+    all_chains = [*n_term_chains[:-1], grafted_chain, *c_term_chains[1:]]
+
+    if ligands:
+        return link_poses(*all_chains, *ligands, rechain=True)
+    return link_poses(*all_chains, rechain=True)
+
+
+def graft_fragment(pose, fragment, site, begin_only=True, allowed_depth=3):
+    """
+    Super grafts the fragment based on positions matching secstruct to site
+
+    begin only only anchors on the first residue (prepends fragment to graft site)
+    allowed_depth gives the allowed number of residues to "chew into" site
+
+    begin only as false not supported yet (appending fragment)
     """
     if site.dssp_type == "L":
         print("loops not supported")
@@ -144,41 +229,65 @@ def graft_fragment(pose, fragment, site, begin_only=True):
         for start in frag_starts:
             if start == 1:
                 continue
-            for i in range(4):
+
+            for i in range(allowed_depth + 1):
                 if i > site.end_pos - site.start_pos:
                     break
+                # work on a copy of the fragment
                 insert = fragment.clone()
-                for j in range(4):
-                    if len(insert.residues) > start:
-                        insert.delete_residue_range_slow(
-                            start + 1, len(insert.residues)
-                        )
-                    if j and j < len(insert.residues):
-                        insert.delete_residue_range_slow(1, j)
-                    if j == len(insert.residues) == 0:
-                        continue
-
-                    grafted = super_and_graft(
-                        pose.clone(),
-                        insert,
-                        start - j,
-                        site.start_pos + i,
-                        fragment.clone().split_by_chain()[
-                            fragment.num_chains()
-                        ],
-                        loop_before=True,
+                super_xform = homog_super_transform_from_residues(
+                    insert.residue(start), pose.residue(site.start_pos)
+                )
+                rotation, translation = np_homog_to_rosetta_rotation_translation(
+                    super_xform
+                )
+                rigid_body_move(
+                    rotation,
+                    translation,
+                    insert,
+                    TrueResidueSelector().apply(insert),
+                    rosetta_vector(0, 0, 0),
+                )
+                # cut out the last chain of the fragment assume its phos
+                phos = insert.split_by_chain()[insert.num_chains()]
+                if len(insert.residues) > start:
+                    insert.delete_residue_range_slow(
+                        start + 1, len(insert.residues)
                     )
-                    if grafted is not None:
-                        grafts.append(grafted)
 
-        # bb align frag start to site.start_pos
+                # Make sure we're only operating on a single chain at a time
+                insert = insert.split_by_chain()[chain_of(insert, start)]
+                graft_pos = site.start_pos + i
+                logger.debug(
+                    f"""insert seq:
+                {insert.annotated_sequence()}"""
+                )
+                logger.debug(
+                    f"""pose seq:
+                {pose.annotated_sequence()}"""
+                )
+                logger.debug(
+                    f"""phos seq:
+                {phos.annotated_sequence()}"""
+                )
+                logger.debug(f"site: {site}")
+                logger.debug(f"pose graft site: {site}")
 
-        # bb align frag end to site.end_pos
+                grafted = graft(
+                    pose.clone(), insert, graft_pos, phos, margin=i + 3
+                )
+                if grafted is not None:
+                    grafts.append(grafted)
+
         if begin_only:
             if grafts:
                 return grafts
             else:
                 return []
+
+        raise ValueError(
+            "Dmitri hasn't implemented appending after anchor, only before"
+        )
         for end in frag_ends:
             if end == len(fragment.residues):
                 continue
@@ -281,7 +390,7 @@ def main(
     else:
         pyrosetta.init()
     # graft_sites = get_graft_sites(sec_structs)
-    fragments = load_fragment_store_from_path(fragment_store_path)[:5]
+    fragments = load_fragment_store_from_path(fragment_store_path)[:20]
     # remove preceding loop and graft
     pose = pyrosetta.pose_from_file(pose_pdb)
     grafts = [*graft_generator(pose, fragments, dssp_types=dssp_match_types)]
