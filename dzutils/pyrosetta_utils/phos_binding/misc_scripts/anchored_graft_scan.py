@@ -1,4 +1,5 @@
 import json
+import sys
 import logging
 
 import pyrosetta
@@ -167,6 +168,8 @@ def graft(
     num_chains = n_term_half.num_chains()
 
     print(f"segment lookup between chains {num_chains-1} and {num_chains}")
+    # n_term_half.dump_pdb("n_half_test.pdb")
+    # subpose_after_graft.dump_pdb("after_graft_test.pdb")
     segment_lookup_mover = run_direct_segment_lookup(
         n_term_half, from_chain=num_chains - 1, to_chain=num_chains
     )
@@ -235,8 +238,9 @@ def graft_fragment(pose, fragment, site, begin_only=True, allowed_depth=3):
                     break
                 # work on a copy of the fragment
                 insert = fragment.clone()
+                graft_pos = site.start_pos + i
                 super_xform = homog_super_transform_from_residues(
-                    insert.residue(start), pose.residue(site.start_pos)
+                    insert.residue(start), pose.residue(graft_pos)
                 )
                 rotation, translation = np_homog_to_rosetta_rotation_translation(
                     super_xform
@@ -257,7 +261,6 @@ def graft_fragment(pose, fragment, site, begin_only=True, allowed_depth=3):
 
                 # Make sure we're only operating on a single chain at a time
                 insert = insert.split_by_chain()[chain_of(insert, start)]
-                graft_pos = site.start_pos + i
                 logger.debug(
                     f"""insert seq:
                 {insert.annotated_sequence()}"""
@@ -272,10 +275,14 @@ def graft_fragment(pose, fragment, site, begin_only=True, allowed_depth=3):
                 )
                 logger.debug(f"site: {site}")
                 logger.debug(f"pose graft site: {site}")
-
+                # insert.dump_pdb("insert_test.pdb")
+                # pose.dump_pdb("pose_test.pdb")
+                # phos.dump_pdb("phos_test.pdb")
+                # sys.exit()
                 grafted = graft(
-                    pose.clone(), insert, graft_pos, phos, margin=i + 3
+                    pose.clone(), insert, graft_pos, phos, margin=i + 4
                 )
+                # sys.exit()
                 if grafted is not None:
                     grafts.append(grafted)
 
@@ -390,7 +397,7 @@ def main(
     else:
         pyrosetta.init()
     # graft_sites = get_graft_sites(sec_structs)
-    fragments = load_fragment_store_from_path(fragment_store_path)[:20]
+    fragments = load_fragment_store_from_path(fragment_store_path)
     # remove preceding loop and graft
     pose = pyrosetta.pose_from_file(pose_pdb)
     grafts = [*graft_generator(pose, fragments, dssp_types=dssp_match_types)]
