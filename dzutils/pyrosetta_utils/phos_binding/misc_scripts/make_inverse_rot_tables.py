@@ -1,6 +1,6 @@
 from os import makedirs
 from os.path import isfile, isdir
-import sys
+import logging
 from itertools import product, compress
 import logging
 
@@ -12,6 +12,7 @@ import pyrosetta.rosetta as pyr
 import pandas as pd
 import getpy as gp
 import numpy as np
+from numba import jit
 
 from xbin import XformBinner as xb
 
@@ -31,6 +32,11 @@ from dzutils.pyrosetta_utils.geometry.pose_xforms import (
 )
 
 
+logger = logging.getLogger("make_inverse_rot_tables")
+logger.setLevel(logging.DEBUG)
+
+
+@jit(nopython=True)
 def cartesian(arrays, out=None):
     """
     Generate a cartesian product of input arrays.
@@ -69,9 +75,9 @@ def cartesian(arrays, out=None):
     arrays = [np.asarray(x) for x in arrays]
     dtype = arrays[0].dtype
 
-    n = np.prod([x.size for x in arrays])
+    n = np.prod(np.asarray([x.size for x in arrays]))
     if out is None:
-        out = np.zeros([n, len(arrays)], dtype=dtype)
+        out = np.zeros((n, len(arrays)), dtype=dtype)
 
     m = n // arrays[0].size
     out[:, 0] = np.repeat(arrays[0], m)
@@ -86,6 +92,7 @@ def rt_from_chis(rotamer_rt_array, *chis, base_atoms=(), target_atoms=()):
     rotamer_rt_array.reset_rotamer(
         *chis, base_atoms=base_atoms, target_atoms=target_atoms
     )
+    # logger.debug(chis)
     return np.array(rotamer_rt_array)
 
 
@@ -188,9 +195,9 @@ def update_df_and_gp_dict(
     Updates df and hashmap, returns ref to both
     """
     mask = hashmap.contains(np.array(new_keys)) == False
-    print("mask generated for batch")
-    print(str(mask))
-    print(f"all: {all(mask)} any: {any(mask)}")
+    logger.debug("mask generated for batch")
+    logger.debug(str(mask))
+    logger.debug(f"all: {all(mask)} any: {any(mask)}")
     if any(mask):
         new_chis_masked, new_keys_masked, new_atoms_masked, new_rts_masked = mask_lists(
             mask, new_chis, new_keys, new_atoms, new_rts
@@ -209,7 +216,8 @@ def update_df_and_gp_dict(
     return df, hashmap
 
 
-def bit_pack_rotamer(*chis, num_chis=3, round_fraction=0.01):
+@jit(nopython=True)
+def bit_pack_rotamers(chis_array, num_chis=3, round_fraction=0.01):
     """
     Converts the given chis to a numpy uint64
 
@@ -217,14 +225,76 @@ def bit_pack_rotamer(*chis, num_chis=3, round_fraction=0.01):
 
     bitwise or over the list
     """
-    scaling = 360 / round_fraction
+    scaling = np.float64(360 / round_fraction)
     if (scaling) > np.power(np.uint64(2), np.uint64(64 // num_chis)):
         raise ValueError(
             "given round_fraction and number of chis cannot fit into uint 64"
         )
-    packed_values = [
-        np.left_shift(np.uint64(), np.uint64()) for i, chi in enumerate(chis)
-    ]
+    # shape = chis_array.shape[1]
+    # uint_chis_array = (np.mod(np.divide(chis_array ,round_fraction) ,scaling)).astype(np.uint64)
+
+    for i in range(num_chis):
+        chis_array[:, i] = np.mod(
+            np.divide(chis_array[:, i], round_fraction), scaling
+        )
+    uint_chis_array = chis_array.astype(np.uint64)
+    for i in range(num_chis):
+        uint_chis_array[:, i] = np.left_shift(
+            uint_chis_array[:, i], np.uint64(i * (64 // num_chis))
+        )
+    packed = uint_chis_array[:, 0]
+    for i in range(1, num_chis):
+        packed = np.bitwise_or(packed, uint_chis_array[:, i])
+    return packed
+
+
+def unpack_chis(packed_chis, num_chis=3, round_fraction=0.01):
+    """
+    Takes a np.array of bitpacked chis and unpacks them
+    """
+
+    unpacked_transpose = np.array(
+        [
+            np.right_shift(packed_chis, i * (64 // num_chis))
+            for i in range(num_chis)
+        ]
+    )
+    shifted = np.transpose(unpacked_transpose)
+    mask = np.power(
+        np.uint64(2), np.uint64(64 // num_chis), dtype=np.uint64
+    ) - np.uint64(1)
+    chis = np.array(
+        np.bitwise_and(shifted, mask) * round_fraction, dtype=np.float64
+    )
+    return chis
+
+
+@jit(nopython=True)
+def expand_rotamer_set(
+    chi_list, search_radius, granularity_factor, round_fraction
+):
+    rotamer_set = set([np.uint64(0)][1:])
+    for chis in chi_list:
+        num_chis = len(chis)
+        chi_array = np.asarray(chis)
+        col_space = np.empty((granularity_factor, num_chis), dtype=np.float64)
+        for i in range(num_chis):
+            col_space[:, i] = np.linspace(
+                chi_array - np.float64(search_radius),
+                chi_array + np.float64(search_radius),
+                granularity_factor,
+            )
+
+        expanded = np.asarray(col_space, dtype=np.float64)
+        fine_chis = cartesian(expanded)
+        uint_rot_repr = bit_pack_rotamers(
+            fine_chis, num_chis=num_chis, round_fraction=round_fraction
+        )
+        if not rotamer_set:
+            rotamer_set = set(uint_rot_repr)
+            continue
+        rotamer_set = rotamer_set.union(set(uint_rot_repr))
+    return rotamer_set
 
 
 @click.command()
@@ -294,7 +364,7 @@ def main(
             pose_from_res(res).dump_pdb(
                 f"{res_out_dir}/{res_type.name3().lower()}_rotamer_{i}.pdb"
             )
-    # print("danger hardcode to reduce rots")
+    # logger.debug"danger hardcode to reduce rots")
     residue = pyrosetta.rosetta.core.conformation.Residue(res_type, True)
     possible_rt_bases = pres_bases(residue)
     # pose = _pyrosetta.rosetta.core.pose.Pose()
@@ -324,7 +394,7 @@ def main(
             "alignment_atoms": alignment_atoms,
             "rt": rts,
         }
-    )
+    ).iloc[:100]
     inv_rot_table["index"] = inv_rot_table.index
     inv_rot_table["cycle"] = pd.Series([1] * len(inv_rot_table.index))
     data_name = f"{run_name}_{angstrom_dist_res}_ang_{angle_res}_deg"
@@ -355,36 +425,53 @@ def main(
         count = 0
         batch_new_chi_ints = set()
         batch_new_chis = []
-        batch_new_atoms = []
         # batch_new_rts = []
         # cycles = 0
-        for chis in inv_rot_table[inv_rot_table["cycle"] == i][
-            "chis"
-        ].to_list():
 
-            for fine_chis in cartesian(
-                *[
-                    np.linspace(
-                        chi_val - search_radius,
-                        chi_val + search_radius,
-                        i * granularity_factor,
-                    )
-                    for chi_val in chis
-                ]
-            ):
-                uint_rot_repr = bit_pack_rotamer(
-                    *fine_chis, num_chis=3, round_fraction=0.01
-                )
-                batch_new_chi_ints.add(uint_rot_repr)
-
+        # for chis in inv_rot_table[inv_rot_table["cycle"] == i][
+        #     "chis"
+        # ].to_list():
+        #
+        #     num_chis = len(chis)
+        #     fine_chis = cartesian(
+        #         np.array([
+        #             np.linspace(
+        #                 chis[j] - search_radius,
+        #                 chis[j] + search_radius,
+        #                 i * granularity_factor,
+        #             )
+        #             for j in range(len(chis))
+        #         ])
+        #     )
+        #     uint_rot_repr = bit_pack_rotamers(fine_chis, num_chis=num_chis,round_fraction=np.float(0.01))
+        #     batch_new_chi_ints = batch_new_chi_ints.union(set(uint_rot_repr))
+        batch_new_chi_ints = expand_rotamer_set(
+            inv_rot_table[inv_rot_table["cycle"] == i]["chis"].to_list(),
+            search_radius,
+            i * granularity_factor,
+            0.01,
+        )
         packed_chis = np.fromiter(batch_new_chi_ints, np.uint64)
-        chi_sets = unpack_chis(packed_chis, num_chis=3)
-        # print(f"batch: {count} exceeds factor: {batch_factor}")
-        batch_new_chis, batch_new_rts = [
-            (chis, rt_from_chis(rotamer_rt, *chis, target_atoms=atoms))
-            for chis in chi_sets
-            for atoms in possible_rt_bases
-        ]
+        chi_sets = unpack_chis(
+            packed_chis, num_chis=3, round_fraction=np.float(0.01)
+        )
+        # logger.debugf"batch: {count} exceeds factor: {batch_factor}")
+        logger.debug(len(chi_sets))
+        logger.debug(chi_sets)
+        logger.debug(possible_rt_bases)
+        batch_new_atoms, batch_new_chis, batch_new_rts = [[], [], []]
+        # [
+        #     (atoms, tuple(chis), rt_from_chis(rotamer_rt, *chis, target_atoms=atoms))
+        #     for chis in chi_sets
+        #     for atoms in possible_rt_bases
+        # ]
+        for chis in chi_sets:
+            for atoms in possible_rt_bases:
+                batch_new_atoms.append(atoms)
+                batch_new_chis.append(atoms)
+                batch_new_rts.append(
+                    rt_from_chis(rotamer_rt, *chis, target_atoms=atoms)
+                )
         batch_new_keys = binner.get_bin_index(np.array(batch_new_rts))
 
         inv_rot_table, gp_dict = update_df_and_gp_dict(
