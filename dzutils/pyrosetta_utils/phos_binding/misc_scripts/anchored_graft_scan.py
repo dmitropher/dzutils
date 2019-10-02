@@ -169,7 +169,7 @@ def graft(
 
     logger.debug(f"segment lookup:")
 
-    segment_lookup_mover = run_direct_segment_lookup(link_portion)
+    segment_lookup_mover = run_direct_segment_lookup(link_portion, length=4)
 
     status = segment_lookup_mover.get_last_move_status()
     if status != pyrosetta.rosetta.protocols.moves.mstype_from_name(
