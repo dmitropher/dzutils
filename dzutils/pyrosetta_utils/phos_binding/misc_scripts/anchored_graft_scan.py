@@ -1,5 +1,5 @@
 import json
-import sys
+import sys, os
 import logging
 
 import pyrosetta
@@ -163,16 +163,13 @@ def graft(
     subpose_before_graft = pyrosetta.rosetta.protocols.grafting.return_region(
         pose.clone(), 1, cut_pos
     )
+    n_term_chains = [chain for chain in subpose_before_graft.split_by_chain()]
+    link_portion = link_poses(n_term_chains[-1], fragment, rechain=True)
+    # num_chains = n_term_half.num_chains()
 
-    n_term_half = link_poses(subpose_before_graft, fragment, rechain=True)
-    num_chains = n_term_half.num_chains()
+    logger.debug(f"segment lookup:")
 
-    print(f"segment lookup between chains {num_chains-1} and {num_chains}")
-    # n_term_half.dump_pdb("n_half_test.pdb")
-    # subpose_after_graft.dump_pdb("after_graft_test.pdb")
-    segment_lookup_mover = run_direct_segment_lookup(
-        n_term_half, from_chain=num_chains - 1, to_chain=num_chains
-    )
+    segment_lookup_mover = run_direct_segment_lookup(link_portion)
 
     status = segment_lookup_mover.get_last_move_status()
     if status != pyrosetta.rosetta.protocols.moves.mstype_from_name(
@@ -182,14 +179,17 @@ def graft(
 
         return
 
+    n_term_chains[-1] = link_portion
     if not len(subpose_after_graft.residues):
         print("aligned to last res, not linking subpose after graft")
         if ligands:
-            return link_poses(n_term_half, *ligands, rechain=True)
+            return link_poses(
+                *n_term_chains.split_by_chain(), *ligands, rechain=True
+            )
         else:
-            return n_term_half
+            return link_poses(*n_term_chains.split_by_chain(), rechain=True)
     print("linking n_term half and c term half")
-    n_term_chains = [chain for chain in n_term_half.split_by_chain()]
+    # n_term_chains = [chain for chain in n_term_half.split_by_chain()]
     c_term_chains = [chain for chain in subpose_after_graft.split_by_chain()]
 
     n_term_final = n_term_chains[-1]
@@ -203,7 +203,14 @@ def graft(
     return link_poses(*all_chains, rechain=True)
 
 
-def graft_fragment(pose, fragment, site, begin_only=True, allowed_depth=3):
+def graft_fragment(
+    pose,
+    fragment,
+    site,
+    begin_only=True,
+    allowed_depth=3,
+    save_intermediate=True,
+):
     """
     Super grafts the fragment based on positions matching secstruct to site
 
@@ -285,6 +292,18 @@ def graft_fragment(pose, fragment, site, begin_only=True, allowed_depth=3):
                 # sys.exit()
                 if grafted is not None:
                     grafts.append(grafted)
+                    if save_intermediate:
+                        name_hash = str(
+                            hash(hash(f"{pose.sequence()}{insert.sequence()}"))
+                        )
+                        outname = f"grafted_{name_hash[:4]}.pdb"
+                        for i in range(5, len(name_hash)):
+                            if os.path.isfile(outname):
+                                outname = f"grafted_{name_hash[:i]}.pdb"
+                            else:
+                                break
+
+                        grafted.dump_pdb(outname)
 
         if begin_only:
             if grafts:
@@ -335,14 +354,18 @@ def get_anchor_sites(pose, *dssp_types, anchor_end=True, res_to_end=0):
         ]
 
 
-def graft_generator(pose, fragments, dssp_types="", anchor_end=True):
+def graft_generator(
+    pose, fragments, dssp_types="", anchor_end=True, save_intermediate=True
+):
     """
     Takes a pose, fragments, and secondary structure containers for the pose
     """
     # sec_structs = parse_structure_from_dssp(pose, *dssp_types)
     for fragment in fragments:
         for site in get_anchor_sites(pose, *dssp_types, anchor_end=anchor_end):
-            for graft in graft_fragment(pose, fragment, site):
+            for graft in graft_fragment(
+                pose, fragment, site, save_intermediate=save_intermediate
+            ):
 
                 yield graft
 
@@ -377,6 +400,7 @@ def accommodate_graft(pose, insertion_res_label, **kwargs):
 @click.argument("fragment_store_path")
 @click.option("-d", "--dssp-match-types", default="")
 @click.option("-r", "--rosetta-flags-file")
+@click.option("--save/--no-save", default=True)
 def main(
     pose_pdb,
     fragment_store_path,
@@ -386,6 +410,7 @@ def main(
     dssp_match_types="",
     rosetta_flags_file="",
     allowed_positions=False,
+    save=True,
 ):
     """
     This program takes a pose and a fragment store and returns alignment graphs
@@ -400,7 +425,14 @@ def main(
     fragments = load_fragment_store_from_path(fragment_store_path)
     # remove preceding loop and graft
     pose = pyrosetta.pose_from_file(pose_pdb)
-    grafts = [*graft_generator(pose, fragments, dssp_types=dssp_match_types)]
+    grafts = [
+        *graft_generator(
+            pose,
+            fragments,
+            dssp_types=dssp_match_types,
+            save_intermediate=save,
+        )
+    ]
     # report_grafts(grafts, log_dir)
     # delooped_grafts = [accommodate_graft(graft) for graft in grafts]
     # clash_checked_grafts = [*clash_checker(consensus)]
