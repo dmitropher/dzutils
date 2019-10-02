@@ -150,6 +150,14 @@ def residues2pose(pose):
         yield new_pose
 
 
+def add_reslabel(pose, label, *resnums):
+    """
+    Applies a residue label to the given contacts
+    """
+    for i in resnums:
+        pose.pdb_info().add_reslabel(i, label)
+
+
 def and_compose_residue_selectors(*args):
     """
     Takes a list of residue selectors of arbitrary size and composes them with AND, returns the AND selector

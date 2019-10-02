@@ -1,4 +1,5 @@
 from itertools import product, groupby
+import logging
 
 import pyrosetta
 
@@ -18,6 +19,9 @@ from dzutils.pyrosetta_utils import (
 from dzutils.pyrosetta_utils.phos_binding import (
     phospho_residue_inverse_rotamer_rts,
 )
+
+logger = logging.getLogger("make_inverse_rot_tables")
+logger.setLevel(logging.DEBUG)
 
 type_dict = {
     "PTR": ("TYR", pyrosetta.rosetta.core.chemical.VariantType.PHOSPHORYLATION)
@@ -50,7 +54,16 @@ def get_rotamer_pose_from_name(resname, *chis):
     residue = get_rotamer_residue_from_name(resname)
     pose.append_residue_by_bond(residue)
     for i, chi in enumerate(chis, 1):
-        pose.set_chi(i, 1, chi)
+        try:
+            pose.set_chi(i, 1, chi)
+        except RuntimeError as e:
+            logger.debug(f"chinum: {i}")
+            logger.debug(f"resnum: {1}")
+            logger.debug(f"chi_val: {chi}")
+            logger.debug(pose)
+            logger.debug(pose.annotated_sequence())
+            logger.debug("issue with rotamer")
+            raise RuntimeError
     rotamer_pose = pose
     return rotamer_pose
 
@@ -73,7 +86,12 @@ def value_to_pose(
         # print (value)
         chis = tuple(*table_entry.iloc[0][list(data_table_fields)].values)
         # print (chis)
-        return get_rotamer_pose_from_name(residue_type_name, *chis)
+        try:
+            return get_rotamer_pose_from_name(residue_type_name, *chis)
+        except RuntimeError as e:
+            logger.debug(f"residue type name {residue_type_name}")
+            logger.debug(f"chis {chis}")
+            logger.debug(f"table entry: {table_entry}")
 
 
 def rotamer_rmsd(pose_1, pose_2, super=True):

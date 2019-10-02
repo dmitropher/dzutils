@@ -3,6 +3,8 @@ import itertools as it
 
 import pyrosetta
 
+import click
+
 from dzutils.pyrosetta_utils import (
     residues_with_element,
     run_pyrosetta_with_flags,
@@ -41,10 +43,9 @@ def get_bb_hbonds(pose):
     hbond_set = build_hbond_set(pose)
 
     return [
-            exclude_self_and_non_bb_hbonds(
-                hbond_to_residue(pose, resnum, hbond_set=hbond_set, vec=False),
-                *acceptor_atoms,
-            
+        exclude_self_and_non_bb_hbonds(
+            hbond_to_residue(pose, resnum, hbond_set=hbond_set, vec=False),
+            *acceptor_atoms,
         )
         # And a dict of acceptable acceptor atoms (atoms bound to P)
         # keys are p atoms, values are lists of bound atoms
@@ -84,7 +85,7 @@ def minimal_fragments_by_contact_number(pose, min_contacts=1, append_factor=0):
             "end": max(*contact_set) + y,
         }
         for hbonds in hbond_collection
-        for r in [get_acceptor_res_for_hbond_collection(hbonds),]
+        for r in [get_acceptor_res_for_hbond_collection(hbonds)]
         if len(hbonds) >= min_contacts
         for contact_set in it.combinations(
             [bond.don_res() for bond in hbonds], min_contacts
@@ -97,7 +98,12 @@ def minimal_fragments_by_contact_number(pose, min_contacts=1, append_factor=0):
 
 
 def minimal_fragments_by_secondary_structure(
-    pose, *struct_types, min_contacts=1, proximity=5,lazy=False, append_factor=0
+    pose,
+    *struct_types,
+    min_contacts=1,
+    proximity=5,
+    lazy=False,
+    append_factor=0,
 ):
     """
     returns fragments with adjacent secondary structure to contacts
@@ -132,7 +138,7 @@ def minimal_fragments_by_secondary_structure(
                 if lazy:
                     break
         if not end_struct:
-            end_struct = min (end_contact + append_factor , pose_size)
+            end_struct = min(end_contact + append_factor, pose_size)
         start_struct = int()
         for i in range(start_contact, start_contact - proximity - 1, -1):
             if i in sec_struct_by_end_pos:
@@ -140,18 +146,18 @@ def minimal_fragments_by_secondary_structure(
                 if lazy:
                     break
         if not start_struct:
-            start_struct = max(start_contact - append_factor,1) 
+            start_struct = max(start_contact - append_factor, 1)
         out_list.append(
-            {
-                "acceptor_res": resnum,
-                "start": start_struct,
-                "end": end_struct,
-            }
+            {"acceptor_res": resnum, "start": start_struct, "end": end_struct}
         )
     return out_list
 
 
-def main ():
+# @click.command()
+# @click.argument("pose_pdb", type=click.Path(exists=True))
+# @click.option("-r", "--reslabel",default="")
+# @click.option("j","--just-label/--full-run", default=False)
+def main():  # pose_pdb,reslabel="",just_label=False):
     ploop_flags_file = "/home/dzorine/phos_binding/pilot_runs/loop_grafting/initial_testing/misc_files/p_ligand.flags"
     run_pyrosetta_with_flags(ploop_flags_file)
     # get pose
@@ -163,13 +169,10 @@ def main ():
     # extract hbonds to these residues where:
     # vec False to use list rather than rosetta vector
 
-
     # no support for different append/prepend values
     append_factor = 3  # +- 0-3 residues
 
-
     num_contacts = int(sys.argv[3])
-
 
     # Extract contiguous loops with these contacts:
     #   - for each bb pair, check if intervening sequence is under 10 res
@@ -182,14 +185,19 @@ def main ():
         r = d["acceptor_res"]
         s = d["start"]
         e = d["end"]
+        # if reslabel:
+        #     reslabel_contacts(pose,reslabel,)
         p = link_poses(
-            pyrosetta.rosetta.protocols.grafting.return_region(pose.clone(), r, r),
+            pyrosetta.rosetta.protocols.grafting.return_region(
+                pose.clone(), r, r
+            ),
             pyrosetta.rosetta.protocols.grafting.return_region(pose, s, e),
             rechain=True,
         )
         p.dump_pdb(
             f"{outdir}/{name}_{num_contacts}-contacts_phos-{r}_frag_{s}-{e}.pdb"
         )
+
 
 if __name__ == "__main__":
     main()

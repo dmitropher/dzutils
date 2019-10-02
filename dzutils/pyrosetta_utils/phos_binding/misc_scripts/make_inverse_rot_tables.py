@@ -35,6 +35,11 @@ from dzutils.pyrosetta_utils.geometry.pose_xforms import (
 logger = logging.getLogger("make_inverse_rot_tables")
 logger.setLevel(logging.DEBUG)
 
+
+def it_cartesian(input_arrays):
+    return product(*input_arrays)
+
+
 # @jit(nopython=True)
 def numba_cartesian(input_arrays, out=None):
     """
@@ -303,7 +308,10 @@ def expand_rotamer_set(
 
         expanded = np.asarray(col_space, dtype=np.float64)
         print("expanded", expanded)
-        fine_chis = numba_cartesian(expanded)
+        # fine_chis = np.array (list(it_cartesian(
+        #     expanded
+        # )), np.float64)
+        fine_chis = np.array(numba_cartesian(expanded))
         print("fine_chis: ", fine_chis)
         uint_rot_repr = bit_pack_rotamers(
             fine_chis, num_chis=num_chis, round_fraction=round_fraction
@@ -406,7 +414,7 @@ def main(
             "alignment_atoms": alignment_atoms,
             "rt": rts,
         }
-    )  # .iloc[:100]
+    )  # .iloc[:500]
     inv_rot_table["index"] = inv_rot_table.index
     inv_rot_table["cycle"] = pd.Series([1] * len(inv_rot_table.index))
     data_name = f"{run_name}_{angstrom_dist_res}_ang_{angle_res}_deg"
@@ -452,7 +460,7 @@ def main(
         for chis in chi_sets:
             for atoms in possible_rt_bases:
                 batch_new_atoms.append(atoms)
-                batch_new_chis.append(atoms)
+                batch_new_chis.append(chis)
                 batch_new_rts.append(
                     rt_from_chis(rotamer_rt, *chis, target_atoms=atoms)
                 )
