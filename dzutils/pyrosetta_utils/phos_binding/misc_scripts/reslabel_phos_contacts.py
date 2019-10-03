@@ -1,3 +1,5 @@
+import os
+
 import click
 
 import pyrosetta
@@ -12,9 +14,9 @@ from dzutils.pyrosetta_utils import (
 
 @click.command()
 @click.argument("pose_pdb", type=click.Path(exists=True))
-@click.argument("-l", "--res-label")
+@click.option("-l", "--res-label", default="phos_contact")
 @click.option("-r", "--rosetta-flags-file", default="")
-@click.argument("-b", "--bb-only", default=False)
+@click.option("-b", "--bb-only", default=False)
 def main(pose_pdb, res_label, bb_only=False, rosetta_flags_file=""):
     """
     """
@@ -35,6 +37,11 @@ def main(pose_pdb, res_label, bb_only=False, rosetta_flags_file=""):
             collection = [
                 b for b in collection if b.don_hatm_is_protein_backbone()
             ]
+        for hbond in collection:
+            pose.pdb_info().add_reslabel(hbond.don_res(), res_label)
+
+    name = f"{os.path.basename(pose_pdb).split('.')[0]}_labeled_contacts.pdb"
+    pose.dump_pdb(name)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,9 @@
+import pickle
+
 import numpy as _np
 
 from pyrosetta.rosetta.core.kinematics import RT
+
 
 from dzutils.pyrosetta_utils.geometry.homog import (
     stub_to_homog as _stub_to_homog,
@@ -255,7 +258,7 @@ class RotamerRTArray(_np.ndarray):
         pickled_state = super(RotamerRTArray, self).__reduce__()
         # # Create our own tuple to pass to __setstate__
         new_state = pickled_state[2] + (
-            self.get_pose(),
+            pickle.dumps(self.get_pose()),
             self._target_atoms,
             self._base_atoms,
             self._inverse,
@@ -268,7 +271,7 @@ class RotamerRTArray(_np.ndarray):
         self._inverse = state[-2]
         self._base_atoms = state[-3]  # Set our attributes
         self._target_atoms = state[-5]
-        self.residue = state[-5].residue(1)
+        self.residue = pickle.loads(state[-5]).residue(1)
         # Call the parent's __setstate__ with the other tuple elements.
         super(RotamerRTArray, self).__setstate__(state[0:-5])
 
