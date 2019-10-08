@@ -40,7 +40,7 @@ def main(pose_pdb, res_label, bb_only=False, rosetta_flags_file=""):
         for hbond in collection:
             pose.pdb_info().add_reslabel(hbond.don_res(), res_label)
 
-    name = f"{os.path.basename(pose_pdb).split('.')[0]}_labeled_contacts.pdb"
+    name = f"{'.'.join(os.path.basename(pose_pdb).split('.')[:-1])}_labeled_contacts.pdb"
     pose.dump_pdb(name)
 
 

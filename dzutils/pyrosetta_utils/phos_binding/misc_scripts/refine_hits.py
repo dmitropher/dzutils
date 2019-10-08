@@ -32,12 +32,6 @@ def index_to_index(pose_1, pose_2, resnum_1, resnum_2, atom_1):
 
 
 def build_harmonic_pair_constraint(res_1, atom_1, res_2, atom_2, value, sd):
-    # print(
-    #     "building atomIDs: ",
-    #     f"{atom_1}, {res_1}",
-    #     f"{atom_2}, {res_2}",
-    #     sep="\n",
-    # )
     return pyrosetta.rosetta.core.scoring.constraints.AtomPairConstraint(
         pyrosetta.rosetta.core.id.AtomID(atom_1, res_1),
         pyrosetta.rosetta.core.id.AtomID(atom_2, res_2),

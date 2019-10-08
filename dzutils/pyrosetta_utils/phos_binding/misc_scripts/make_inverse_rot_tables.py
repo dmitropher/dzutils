@@ -98,7 +98,7 @@ def numba_cartesian(input_arrays, out=None):
 
     out[:, 0] = np.repeat(arrays[0], m)
     array_len = len(input_arrays[1:])
-    print(m)
+    logger.debug(m)
     if array_len > 0:
         numba_cartesian(arrays[1:], out=out[0:m, 1:])
         for j in range(1, arrays[0].size):
@@ -294,9 +294,20 @@ def expand_rotamer_set(
     rotamer_set = set([np.uint64(0)][1:])
     num_chi_sets = chi_array.shape[0]
     # logger.debug (num_chi_sets)
+
     for i in range(num_chi_sets):
         chis = chi_array[i]
         num_chis = len(chis)
+        if (
+            bit_pack_rotamers(
+                np.array([chis]),
+                num_chis=num_chis,
+                round_fraction=round_fraction,
+            )[0]
+            in rotamer_set
+        ):
+            continue
+
         # chi_array = np.asarray(chis)
         col_space = np.empty((num_chis, granularity_factor), dtype=np.float64)
         for j in range(num_chis):
@@ -307,12 +318,14 @@ def expand_rotamer_set(
             )
 
         expanded = np.asarray(col_space, dtype=np.float64)
-        print("expanded", expanded)
+        logger.debug("expanded:")
+        logger.debug(f"{expanded}")
         # fine_chis = np.array (list(it_cartesian(
         #     expanded
         # )), np.float64)
         fine_chis = np.array(numba_cartesian(expanded))
-        print("fine_chis: ", fine_chis)
+        logger.debug("fine_chis: ")
+        logger.debug(f"{fine_chis}")
         uint_rot_repr = bit_pack_rotamers(
             fine_chis, num_chis=num_chis, round_fraction=round_fraction
         )
@@ -329,11 +342,13 @@ def expand_rotamer_set(
 @click.option("-d", "--angstrom-dist-res", default=1.0)
 @click.option("-r", "--run-name", default="inverse_ptr_exchi7_rotamers")
 @click.option("-e", "--erase/--no-erase", default=False)
+@click.option("-p", "--ramp/--no-ramp", default=False)
 @click.option("-m", "--metrics-out-dir", default=False)
 @click.option("-b", "--batch-factor", default=10000)
 @click.option("-g", "--granularity-factor", default=15)
 @click.option("-c", "--cycle_depth", default=3)
 @click.option("-s", "--search-radius", default=5)
+
 # @click.option("-d","--rots-for)
 def main(
     run_name="inverse_ptr_exchi7_rotamers",
@@ -346,6 +361,7 @@ def main(
     granularity_factor=15,
     cycle_depth=3,
     search_radius=5,
+    ramp=False,
 ):
 
     db_path = (
@@ -383,7 +399,7 @@ def main(
             pose_from_res(res).dump_pdb(
                 f"{res_out_dir}/{res_type.name3().lower()}_rotamer_{i}.pdb"
             )
-    logger.debug("working on rotamer count: ", len(residues))
+    logger.debug(f"working on rotamer count: {len(residues)}")
     # logger.debug"danger hardcode to reduce rots")
     residue = pyrosetta.rosetta.core.conformation.Residue(res_type, True)
     possible_rt_bases = pres_bases(residue)
@@ -416,7 +432,7 @@ def main(
         }
     )  # .iloc[:500]
     inv_rot_table["index"] = inv_rot_table.index
-    inv_rot_table["cycle"] = pd.Series([1] * len(inv_rot_table.index))
+    inv_rot_table["cycle"] = pd.Series([0] * len(inv_rot_table.index))
     data_name = f"{run_name}_{angstrom_dist_res}_ang_{angle_res}_deg"
     inv_rot_table.name = data_name
 
@@ -435,13 +451,18 @@ def main(
         count = 0
         batch_new_chi_ints = set()
         batch_new_chis = []
-        chi_list = inv_rot_table[inv_rot_table["cycle"] == i]["chis"].to_list()
+        chi_list = inv_rot_table[inv_rot_table["cycle"] == i - 1][
+            "chis"
+        ].to_list()
         chi_set = set(chi_list)
         chi_array = np.asarray(list(chi_set), np.float64)
         logger.debug(chi_array)
         logger.debug(i * granularity_factor)
         batch_new_chi_ints = expand_rotamer_set(
-            chi_array, search_radius, i * granularity_factor, np.float64(0.01)
+            chi_array,
+            search_radius,
+            (i * granularity_factor if ramp else granularity_factor),
+            np.float64(0.01),
         )
         packed_chis = np.fromiter(batch_new_chi_ints, np.uint64)
         chi_sets = unpack_chis(
@@ -451,6 +472,8 @@ def main(
         logger.debug(len(chi_sets))
         logger.debug(chi_sets)
         logger.debug(possible_rt_bases)
+        if not len(chi_sets):
+            break
         batch_new_atoms, batch_new_chis, batch_new_rts = [[], [], []]
         # [
         #     (atoms, tuple(chis), rt_from_chis(rotamer_rt, *chis, target_atoms=atoms))
@@ -460,10 +483,12 @@ def main(
         for chis in chi_sets:
             for atoms in possible_rt_bases:
                 batch_new_atoms.append(atoms)
-                batch_new_chis.append(chis)
+                batch_new_chis.append(tuple(chis))
                 batch_new_rts.append(
                     rt_from_chis(rotamer_rt, *chis, target_atoms=atoms)
                 )
+        logger.debug("new rts to be xbinned")
+        logger.debug(f"{np.array(batch_new_rts)}")
         batch_new_keys = binner.get_bin_index(np.array(batch_new_rts))
 
         inv_rot_table, gp_dict = update_df_and_gp_dict(
