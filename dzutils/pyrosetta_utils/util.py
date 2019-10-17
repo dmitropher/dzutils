@@ -5,6 +5,24 @@ from dzutils.pdb_file_utils import pdb_files_in_dir as _pfd
 from dzutils.util import read_flag_file
 
 
+def fuzzy_trim(pose, end, trim_amount, buffer=0):
+    """
+    performs delete_residue_range_slow from end - (1 through trim_amount) to end
+
+    setting buffer also allows trims that stop short of end (shorter trims)
+    """
+    trimmed = []
+    for i in range(end - trim_amount, end):
+        for j in range(1, buffer + 1):
+            if i < 1:
+                continue
+            elif end - j >= i:
+                to_trim = pose.clone()
+                to_trim.delete_residue_range_slow(i, end - j)
+                trimmed.append(to_trim)
+    return trimmed
+
+
 def residue_type_from_name3(name, variant=None):
     """
     Returns a new residue object from the current ResidueTypeSet
