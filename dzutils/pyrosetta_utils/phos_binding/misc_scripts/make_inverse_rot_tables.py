@@ -336,6 +336,30 @@ def expand_rotamer_set(
     return rotamer_set
 
 
+class ChiRangeContainer(object):
+    """
+    """
+
+    def __init__(
+        self,
+        restype,
+        allowed_target_atoms,
+        allowed_base_atoms,
+        angstrom_dist_res=1,
+        angle_res=15,
+        inverse=False,
+    ):
+        self._restype = restype
+        self._residue = pyrosetta.rosetta.core.conformation.Residue(
+            self._restype, True
+        )
+        self.rotamer_rt_array = RotamerRTArray(
+            residue=self._residue,
+            target_atoms=allowed_target_atoms[0],
+            inverse=inverse,
+        )
+
+
 @click.command()
 @click.option("-o", "--res-out-dir")
 @click.option("-a", "--angle-res", default=15.0)
@@ -447,15 +471,13 @@ def main(
     gp_dict[inv_rot_keys] = inv_rot_vals
 
     for i in range(1, cycle_depth + 1):
-        # batch_factor = 1000
-        count = 0
+
         batch_new_chi_ints = set()
         batch_new_chis = []
         chi_list = inv_rot_table[inv_rot_table["cycle"] == i - 1][
             "chis"
         ].to_list()
-        chi_set = set(chi_list)
-        chi_array = np.asarray(list(chi_set), np.float64)
+        chi_array = np.asarray(chi_list, np.float64)
         logger.debug(chi_array)
         logger.debug(i * granularity_factor)
         batch_new_chi_ints = expand_rotamer_set(
@@ -475,11 +497,7 @@ def main(
         if not len(chi_sets):
             break
         batch_new_atoms, batch_new_chis, batch_new_rts = [[], [], []]
-        # [
-        #     (atoms, tuple(chis), rt_from_chis(rotamer_rt, *chis, target_atoms=atoms))
-        #     for chis in chi_sets
-        #     for atoms in possible_rt_bases
-        # ]
+
         for chis in chi_sets:
             for atoms in possible_rt_bases:
                 batch_new_atoms.append(atoms)
