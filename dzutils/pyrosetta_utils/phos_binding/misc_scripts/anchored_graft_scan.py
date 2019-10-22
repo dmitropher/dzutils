@@ -245,7 +245,7 @@ def graft_fragment(
     begin_only=True,
     allowed_depth=3,
     save_intermediate=True,
-    num_loops_per_graft=1,
+    get_additional_output=True,
 ):
     """
     Super grafts the fragment based on positions matching secstruct to site
@@ -318,28 +318,15 @@ def graft_fragment(
                 )
                 logger.debug(f"site: {site}")
                 logger.debug(f"pose graft site: {site}")
-                # insert.dump_pdb("insert_test.pdb")
-                # pose.dump_pdb("pose_test.pdb")
-                # phos.dump_pdb("phos_test.pdb")
-                # sys.exit()
+
                 grafted = graft(
                     pose.clone(), insert, graft_pos, phos, margin=i + 4
                 )
-                # sys.exit()
+
                 if grafted:
                     grafts.extend(grafted)
-                    if save_intermediate:
-                        name_hash = str(
-                            hash(hash(f"{pose.sequence()}{insert.sequence()}"))
-                        )
-                        outname = f"grafted_{name_hash[:4]}.pdb"
-                        for i in range(5, len(name_hash)):
-                            if os.path.isfile(outname):
-                                outname = f"grafted_{name_hash[:i]}.pdb"
-                            else:
-                                break
 
-                        grafted.dump_pdb(outname)
+                    # grafted.dump_pdb(outname)
 
         if begin_only:
             if grafts:
@@ -396,7 +383,7 @@ def graft_generator(
     dssp_types="",
     anchor_end=True,
     save_intermediate=True,
-    num_loops_per_graft=1,
+    get_additional_output=True,
 ):
     """
     Takes a pose, fragments, and secondary structure containers for the pose
@@ -409,7 +396,7 @@ def graft_generator(
                 fragment,
                 site,
                 save_intermediate=save_intermediate,
-                num_loops_per_graft=num_loops_per_graft,
+                get_additional_output=get_additional_output,
             ):
 
                 yield graft
@@ -445,19 +432,16 @@ def accommodate_graft(pose, insertion_res_label, **kwargs):
 @click.argument("fragment_store_path")
 @click.option("-d", "--dssp-match-types", default="")
 @click.option("-r", "--rosetta-flags-file")
-@click.option("-n", "--num-loops-per_graft", default=1)
+@click.option("--get-additional-output/--one-output", default=True)
 @click.option("--save/--no-save", default=True)
 def main(
     pose_pdb,
     fragment_store_path,
-    # inv_rot_table_path,
-    # inv_rot_dict_path,
-    # log_dir,
     dssp_match_types="",
     rosetta_flags_file="",
     allowed_positions=False,
     save=True,
-    num_loops_per_graft=1,
+    get_additional_output=True,
 ):
     """
     This program takes a pose and a fragment store and returns alignment graphs
@@ -472,27 +456,19 @@ def main(
     fragments = load_fragment_store_from_path(fragment_store_path)
     # remove preceding loop and graft
     pose = pyrosetta.pose_from_file(pose_pdb)
-    grafts = [
-        *graft_generator(
+
+    grafts = []
+    for i, graft in enumerate(
+        graft_generator(
             pose,
             fragments,
             dssp_types=dssp_match_types,
             save_intermediate=save,
-            num_loops_per_graft=1,
-        )
-    ]
-    # report_grafts(grafts, log_dir)
-    # delooped_grafts = [accommodate_graft(graft) for graft in grafts]
-    # clash_checked_grafts = [*clash_checker(consensus)]
-    # report_grafts(clash_checked_grafts, log_dir)
-    # inv_rot_scanned = [
-    #     *inv_rot_scanner(
-    #         clash_checked_grafts, inv_rot_table_path, inv_rot_dict_path
-    #     )
-    # ]
-    for i, graft in enumerate(grafts, 1):
+            get_additional_output=get_additional_output,
+        ),
+        1,
+    ):
         graft.dump_pdb(f"graft_{i}.pdb")
-    # dump_results(inv_rot_scanned)
 
 
 if __name__ == "__main__":
