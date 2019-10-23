@@ -67,6 +67,25 @@ def get_rotamer_pose_from_name(resname, *chis):
     return rotamer_pose
 
 
+def get_rotamer_pose_from_residue_type(residue_type, *chis):
+    pose = pyrosetta.rosetta.core.pose.Pose()
+    residue = pyrosetta.rosetta.core.conformation.Residue(residue_type, False)
+    pose.append_residue_by_bond(residue)
+    for i, chi in enumerate(chis, 1):
+        try:
+            pose.set_chi(i, 1, chi)
+        except RuntimeError as e:
+            logger.debug(f"chinum: {i}")
+            logger.debug(f"resnum: {1}")
+            logger.debug(f"chi_val: {chi}")
+            logger.debug(pose)
+            logger.debug(pose.annotated_sequence())
+            logger.debug("issue with rotamer")
+            raise RuntimeError
+    rotamer_pose = pose
+    return rotamer_pose
+
+
 def value_to_pose(
     value,
     data_table,
@@ -102,39 +121,28 @@ def rotamer_rmsd(pose_1, pose_2, super=True):
         )
 
 
-def process_hits_by_rmsd(
-    hits_df,
-    values,
-    data_table,
-    conversion_type,
-    *data_table_fields,
-    super=True,
-):
+def process_hits_by_rmsd(restype, ideal_chis, query_chis, super=True):
     """
-    Get the rmsd for the hits and attach it to the hits df
+    Get the rmsd for query chis to ideal chis given the residue type
 
-    default is to use the super full atom rmsd
+    returns a list of rmsd values
     """
-    # print(len(hits_df))
-    ideal_poses = [
-        value_to_pose(
-            value,
-            data_table,
-            conversion_type,
-            *data_table_fields,
-            residue_type_name=name,
+    ideal_res = pyrosetta.rosetta.core.conformation.Residue(restype, False)
+    query_res = pyrosetta.rosetta.core.conformation.Residue(restype, False)
+    ideal_res_pose = pyrosetta.core.pose.Pose()
+    ideal_res_pose.append_residue_by_bond(ideal_res)
+    query_res_pose = pyrosetta.core.pose.Pose()
+    query_res_pose.append_residue_by_bond(query_res)
+
+    rmsd_list = []
+    for ideal, query in zip(ideal_chis, query_chis):
+        set_rotamer_chis(ideal_res_pose.residue(1), *ideal)
+        set_rotamer_chis(query_res_pose.residue(1), *query)
+        rmsd_list.append(
+            rotamer_rmsd(ideal_res_pose, query_res_pose, super=super)
         )
-        for value, name in zip(values, hits_df["res_type_name"])
-    ]
-    pose_pairs = zip(hits_df["rot_pose"].copy(), ideal_poses)
-    hits_df["rmsd_to_ideal"] = pd.Series(
-        [float(rotamer_rmsd(*pair, super=super)) for pair in pose_pairs],
-        dtype=np.float64,
-    )
 
-    rmsd_to_ideal_df = hits_df
-
-    return rmsd_to_ideal_df
+    return rmsd_list
 
 
 def kd_tree_from_rotamer_table(chi_table, *fields):
@@ -149,30 +157,69 @@ def kd_tree_from_rotamer_table(chi_table, *fields):
     return KDTree(unique_chis), unique_chis
 
 
-def process_misses(misses_df, data_table, *rotamer_fields):
-    nearest_chi_tree, chi_data = kd_tree_from_rotamer_table(
-        data_table, *rotamer_fields
-    )
-    columns = [
-        f"chi_{i}"
-        for i in range(1, len(misses_df.columns) + 1)
-        if f"chi_{i}" in misses_df
-    ]
-    miss_chis = zip(
-        misses_df["res_type_name"], *[misses_df[col] for col in columns]
-    )
-    miss_rmsd = [
-        rotamer_rmsd(
-            pose,
-            get_rotamer_pose_from_name(
-                restype_chis[0],
-                *chi_data[nearest_chi_tree.query(restype_chis[1:])[1]],
-            ),
+def kd_tree_from_chis(chis_list):
+    unique_chis = np.array(list(k for k, _ in groupby(chis_list)))
+    return KDTree(unique_chis), unique_chis
+
+
+def process_misses(restype, ideal_chis_list, query_chis_list):
+    nearest_chi_tree, chi_data = kd_tree_from_chis(ideal_chis_list)
+
+    ideal_res = pyrosetta.rosetta.core.conformation.Residue(restype, False)
+    query_res = pyrosetta.rosetta.core.conformation.Residue(restype, False)
+    ideal_res_pose = pyrosetta.core.pose.Pose()
+    ideal_res_pose.append_residue_by_bond(ideal_res)
+    query_res_pose = pyrosetta.core.pose.Pose()
+    query_res_pose.append_residue_by_bond(query_res)
+
+    rmsd_list = []
+
+    for chis in query_chis_list:
+        ideal_chis = nearest_chi_tree.query(chis)[1]
+        set_rotamer_chis(ideal_res_pose.residue(1), *ideal_chis)
+        set_rotamer_chis(query_res_pose.residue(1), *chis)
+        rmsd_list.append(
+            rotamer_rmsd(ideal_res_pose, query_res_pose, super=super)
         )
-        for pose, restype_chis in zip(misses_df["rot_pose"], miss_chis)
-    ]
-    misses_df["rmsd_to_ideal"] = pd.Series(miss_rmsd)
-    return misses_df
+    return rmsd_list
+
+
+def chi_list_to_query_df(chi_data_list):
+    """
+    Convert rotamer data list to a dataframe with chis and RTs (for all P bases)
+
+    Takes test rotamer data in the form [(resname,chi_1,...,chi_n),...,(etc)]
+    """
+    rt_chi_key_map = {}
+    rotamer_rt_map = {}
+    for rot_info in chi_data_list:
+        resname = rot_info[0]
+
+        if resname not in rt_chi_key_map.keys():
+            residue = get_rotamer_residue_from_name(resname)
+            rotamer_rt_map[resname] = RotamerRTArray(
+                residue=residue,
+                target_atoms=("P", "P", "OH", "O2P"),
+                inverse=True,
+            )
+            rt_chi_key_map[resname] = {"chis": [], "RTs": []}
+        rotamer_rt_map[resname].set_all_chi(*rot_info[1:])
+        rts = phospho_residue_inverse_rotamer_rts(
+            rotamer_rt_map[resname].residue,
+            rotamer_rt_array=rotamer_rt_map[resname],
+        )
+        rt_chi_key_map[resname]["RTs"].extend(rts)
+        rt_chi_key_map[resname]["chis"].extend(
+            [tuple(rot_info[1:])] * len(rts)
+        )
+
+    query_df = pd.DataFrame()
+    for resname in rt_chi_key_map:
+        resname_frame = pd.DataFrame(rt_chi_key_map[resname])
+        resname_frame["resname"] = resname
+        query_df = pd.concat([query_df, resname_frame])
+
+    return query_df, rotamer_rt_map
 
 
 def test_hash_table(
@@ -198,42 +245,13 @@ def test_hash_table(
     misses should have rmsd to the closest "ideal" query, or if not provided
     just the chis and the key
     """
-    rt_chi_key_map = {}
-    rotamer_rt_map = {}
-    for rot_info in test_data:
-        resname = rot_info[0]
+    query_df, rotamer_rt_map = chi_list_to_query_df(test_data)
 
-        if resname not in rt_chi_key_map.keys():
-            residue = get_rotamer_residue_from_name(resname)
-            rotamer_rt_map[resname] = RotamerRTArray(
-                residue=residue,
-                target_atoms=("P", "P", "OH", "O2P"),
-                inverse=True,
-            )
-            rt_chi_key_map[resname] = {"chis": [], "RTs": []}
-        rotamer_rt_map[resname].set_all_chi(*rot_info[1:])
-        rts = phospho_residue_inverse_rotamer_rts(
-            rotamer_rt_map[resname].residue,
-            rotamer_rt_array=rotamer_rt_map[resname],
-        )
-        rt_chi_key_map[resname]["RTs"].extend(rts)
-        rt_chi_key_map[resname]["chis"].extend(
-            [tuple(rot_info[1:])] * len(rts)
-        )
-
-    query_df = pd.DataFrame()
-    for resname in rt_chi_key_map:
-        resname_frame = pd.DataFrame(rt_chi_key_map[resname])
-        resname_frame[resname] = resname
-        query_df = pd.concat([query_df, resname_frame])
-
-    rts_array = np.array(query_df["RTs"])
-    print(rts_array)
-    raise
     binner = xb(xbin_cart_resl, xbin_ori_resl)
+    rts_array = np.array(query_df["RTs"].to_list())
     test_keys = binner.get_bin_index(rts_array)
+
     hits_mask = table.contains(test_keys)
-    # print (any(hits_mask))
     miss_mask = hits_mask == False
 
     hits_df = query_df[hits_mask].copy()
@@ -244,18 +262,44 @@ def test_hash_table(
     # print (values)
     misses_df = query_df[miss_mask].copy()
 
-    hits = process_hits_by_rmsd(
-        hits_df,
-        values,
-        data_table,
-        data_table_index_conversion,
-        *data_table_rotamer_fields,
+    table_hits_mask = data_table["index"].apply(lambda ind: ind in values)
+    hits_table = data_table[table_hits_mask]
+
+    # Theres no check here to make sure that values is actually in the same order
+    # as hits_df, this may be an issue down the line if the order of dfs moving
+    # stuff is not guaranteed
+
+    chis_ideal_list = (
+        pd.DataFrame(values)
+        .merge(
+            hits_table,
+            left_on=0,
+            right_on="index",
+            suffixes=["_1", ""],
+            validate="1:1",
+        )["chis"]
+        .to_list()
+    )
+
+    if len(rotamer_rt_map.keys()) != 1:
+        raise NotImplementedError("It happened again")
+
+    restype = rotamer_rt_map[rotamer_rt_map.keys()[0]].residue.type()
+
+    hits_rmsd_list = process_hits_by_rmsd(
+        restype,
+        chis_ideal_list,
+        hits_table["chis"].to_list(),
         super=super_hits_before_rmsd,
     )
-    misses = process_misses(misses_df, data_table, *data_table_rotamer_fields)
-    hits = hits[[col for col in hits if col != "rot_pose"]]
-    misses = misses[[col for col in misses if col != "rot_pose"]]
-    return hits, misses
+
+    misses_rmsd_list = process_misses(
+        restype, data_table["chis"].to_list(), misses_df["chis"].to_list()
+    )
+
+    hits_df["rmsd_to_hit"] = hits_rmsd_list
+    misses_df["rmsd_to_closest"] = misses_rmsd_list
+    return hits_df, misses_df
 
 
 def build_test_rotamers_from_resname(residue_type_name, margin, granularity):
