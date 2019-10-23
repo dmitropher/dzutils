@@ -5,20 +5,19 @@ import pyrosetta
 
 import numpy as np
 import pandas as pd
-import getpy as gp
-import scipy.spatial
+
+# import getpy as gp
+# import scipy.spatial
 from scipy.spatial.kdtree import KDTree
 
 from xbin import XformBinner as xb
 
-from dzutils.pyrosetta_utils import (
-    run_pyrosetta_with_flags,
-    residue_type_from_name3,
-    residue_from_name3,
-)
+from dzutils.pyrosetta_utils import residue_type_from_name3
 from dzutils.pyrosetta_utils.phos_binding import (
     phospho_residue_inverse_rotamer_rts,
 )
+
+from dzutils.pyrosetta_utils.geometry.pose_xforms import RotamerRTArray
 
 logger = logging.getLogger("make_inverse_rot_tables")
 logger.setLevel(logging.DEBUG)
@@ -199,47 +198,51 @@ def test_hash_table(
     misses should have rmsd to the closest "ideal" query, or if not provided
     just the chis and the key
     """
-    res_type_names, rot_poses, rts, chi_tuples = zip(
-        *[
-            (
-                rot_info[0],
-                get_rotamer_pose_from_name(rot_info[0], *rot_info[1:]),
-                rt,
-                tuple(rot_info[1:]),
-            )
-            for rot_info in test_data
-            for rt in phospho_residue_inverse_rotamer_rts(
-                set_rotamer_chis(
-                    get_rotamer_residue_from_name(rot_info[0]), *rot_info[1:]
-                )
-            )
-        ]
-    )
+    rt_chi_key_map = {}
+    rotamer_rt_map = {}
+    for rot_info in test_data:
+        resname = rot_info[0]
 
+        if resname not in rt_chi_key_map.keys():
+            residue = get_rotamer_residue_from_name(resname)
+            rotamer_rt_map[resname] = RotamerRTArray(
+                residue=residue,
+                target_atoms=("P", "P", "OH", "O2P"),
+                inverse=True,
+            )
+            rt_chi_key_map[resname] = {"chis": [], "RTs": []}
+        rotamer_rt_map[resname].set_all_chi(*rot_info[1:])
+        rts = phospho_residue_inverse_rotamer_rts(
+            rotamer_rt_map[resname].residue,
+            rotamer_rt_array=rotamer_rt_map[resname],
+        )
+        rt_chi_key_map[resname]["RTs"].extend(rts)
+        rt_chi_key_map[resname]["chis"].extend(
+            [tuple(rot_info[1:])] * len(rts)
+        )
+
+    query_df = pd.DataFrame()
+    for resname in rt_chi_key_map:
+        resname_frame = pd.DataFrame(rt_chi_key_map[resname])
+        resname_frame[resname] = resname
+        query_df = pd.concat([query_df, resname_frame])
+
+    rts_array = np.array(query_df["RTs"])
+    print(rts_array)
+    raise
     binner = xb(xbin_cart_resl, xbin_ori_resl)
-
-    test_keys = binner.get_bin_index(np.array(rts))
+    test_keys = binner.get_bin_index(rts_array)
     hits_mask = table.contains(test_keys)
     # print (any(hits_mask))
     miss_mask = hits_mask == False
-    all_results_df = pd.DataFrame(
-        {
-            **{
-                "res_type_name": res_type_names,
-                "rot_pose": rot_poses,
-                "rt": rts,
-                "key": test_keys,
-            },
-            **{f"chi_{i}": chis for i, chis in enumerate(zip(*chi_tuples), 1)},
-        }
-    )
-    hits_df = all_results_df[hits_mask].copy()
-    hits_keys = hits_df["key"].copy()
+
+    hits_df = query_df[hits_mask].copy()
+    hits_keys = test_keys[hits_mask]
     if data_table is None:
         pd.read_json(data_table_path)
     values = pd.Series(table[np.array(hits_keys)], dtype=np.dtype("i8"))
     # print (values)
-    misses_df = all_results_df[miss_mask].copy()
+    misses_df = query_df[miss_mask].copy()
 
     hits = process_hits_by_rmsd(
         hits_df,
