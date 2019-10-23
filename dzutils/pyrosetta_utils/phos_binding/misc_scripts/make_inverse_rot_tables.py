@@ -353,7 +353,7 @@ class ChiRangeContainer(object):
         self._residue = pyrosetta.rosetta.core.conformation.Residue(
             self._restype, True
         )
-        self.rotamer_rt_array = RotamerRTArray(
+        self._rotamer_rt_array = RotamerRTArray(
             residue=self._residue,
             target_atoms=allowed_target_atoms[0],
             inverse=inverse,
