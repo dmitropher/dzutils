@@ -65,6 +65,9 @@ def residue_from_name3(name, variant=None):
 
 
 def run_pyrosetta_with_flags(flags_file_path):
+    if not flags_file_path:
+        pyrosetta.init()
+        return
     flags = read_flag_file(flags_file_path)
     flags_str = " ".join(flags.replace("\n", " ").split())
     pyrosetta.init(flags_str)

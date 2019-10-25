@@ -356,13 +356,21 @@ def graft_fragment(
             return grafts
 
 
-def get_anchor_sites(pose, *dssp_types, anchor_end=True, res_to_end=0):
+def get_anchor_sites(
+    pose, *dssp_types, anchor_end=True, res_to_end=0, struct_numbers=""
+):
     """
     Gets the secstruct container for sites with appropriate anchor positions
 
     can require a certain number of residues from the end (to get an internal graft)
     """
+
     sec_structs = parse_structure_from_dssp(pose, *dssp_types)
+    if struct_numbers:
+        nums = [int(num) for num in struct_numbers.split(",")]
+        sec_structs = [
+            sec_structs[i] for i in range(len(sec_structs)) if i in nums
+        ]
     if res_to_end:
         return sec_structs
     if anchor_end:
@@ -384,13 +392,19 @@ def graft_generator(
     anchor_end=True,
     save_intermediate=True,
     get_additional_output=True,
+    struct_numbers="",
 ):
     """
     Takes a pose, fragments, and secondary structure containers for the pose
     """
     # sec_structs = parse_structure_from_dssp(pose, *dssp_types)
     for fragment in fragments:
-        for site in get_anchor_sites(pose, *dssp_types, anchor_end=anchor_end):
+        for site in get_anchor_sites(
+            pose,
+            *dssp_types,
+            anchor_end=anchor_end,
+            struct_numbers=struct_numbers,
+        ):
             for graft in graft_fragment(
                 pose,
                 fragment,
@@ -434,6 +448,11 @@ def accommodate_graft(pose, insertion_res_label, **kwargs):
 @click.option("-r", "--rosetta-flags-file")
 @click.option("--get-additional-output/--one-output", default=True)
 @click.option("--save/--no-save", default=True)
+@click.option(
+    "-s",
+    "--struct-numbers",
+    help="Only attempt grafts on the chosen secondary structures (indexed from 0). Must be given a ',' separated string, sorry, Ill try to fix this later.",
+)
 def main(
     pose_pdb,
     fragment_store_path,
@@ -442,6 +461,7 @@ def main(
     allowed_positions=False,
     save=True,
     get_additional_output=True,
+    struct_numbers="",
 ):
     """
     This program takes a pose and a fragment store and returns alignment graphs
@@ -465,6 +485,7 @@ def main(
             dssp_types=dssp_match_types,
             save_intermediate=save,
             get_additional_output=get_additional_output,
+            struct_numbers=struct_numbers,
         ),
         1,
     ):
