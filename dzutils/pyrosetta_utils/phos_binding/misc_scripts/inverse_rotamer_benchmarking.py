@@ -13,6 +13,9 @@ from scipy.spatial.kdtree import KDTree
 from xbin import XformBinner as xb
 
 from dzutils.pyrosetta_utils import residue_type_from_name3
+
+from dzutils.pyrosetta_utils.geometry.superposition_utilities import superposition_pose
+
 from dzutils.pyrosetta_utils.phos_binding import (
     phospho_residue_inverse_rotamer_rts,
 )
@@ -111,9 +114,19 @@ def value_to_pose(
             logger.debug(f"chis {chis}")
             logger.debug(f"table entry: {table_entry}")
 
+def atom_coords(pose):
+    coords  = pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
+    for residue in pose.residues:
+        for atom in residue.atoms():
+            coords.append(atom.xyz())
+    return coords
 
 def rotamer_rmsd(pose_1, pose_2, super=True):
     if super:
+
+        superposition_pose(pose_1,atom_coords(pose_1),atom_coords(pose_2))
+
+
         return pyrosetta.rosetta.core.scoring.all_atom_rmsd(pose_1, pose_2)
     else:
         return pyrosetta.rosetta.core.scoring.all_atom_rmsd_nosuper(
@@ -129,9 +142,9 @@ def process_hits_by_rmsd(restype, ideal_chis, query_chis, super=True):
     """
     ideal_res = pyrosetta.rosetta.core.conformation.Residue(restype, False)
     query_res = pyrosetta.rosetta.core.conformation.Residue(restype, False)
-    ideal_res_pose = pyrosetta.core.pose.Pose()
+    ideal_res_pose = pyrosetta.rosetta.core.pose.Pose()
     ideal_res_pose.append_residue_by_bond(ideal_res)
-    query_res_pose = pyrosetta.core.pose.Pose()
+    query_res_pose = pyrosetta.rosetta.core.pose.Pose()
     query_res_pose.append_residue_by_bond(query_res)
 
     rmsd_list = []
@@ -167,15 +180,16 @@ def process_misses(restype, ideal_chis_list, query_chis_list):
 
     ideal_res = pyrosetta.rosetta.core.conformation.Residue(restype, False)
     query_res = pyrosetta.rosetta.core.conformation.Residue(restype, False)
-    ideal_res_pose = pyrosetta.core.pose.Pose()
+    ideal_res_pose = pyrosetta.rosetta.core.pose.Pose()
     ideal_res_pose.append_residue_by_bond(ideal_res)
-    query_res_pose = pyrosetta.core.pose.Pose()
+    query_res_pose = pyrosetta.rosetta.core.pose.Pose()
     query_res_pose.append_residue_by_bond(query_res)
 
     rmsd_list = []
 
     for chis in query_chis_list:
-        ideal_chis = nearest_chi_tree.query(chis)[1]
+        ideal_chis_index = nearest_chi_tree.query(chis)[1]
+        ideal_chis = chi_data[ideal_chis_index]
         set_rotamer_chis(ideal_res_pose.residue(1), *ideal_chis)
         set_rotamer_chis(query_res_pose.residue(1), *chis)
         rmsd_list.append(
@@ -258,33 +272,32 @@ def test_hash_table(
     hits_keys = test_keys[hits_mask]
     if data_table is None:
         pd.read_json(data_table_path)
-    values = pd.Series(table[np.array(hits_keys)], dtype=np.dtype("i8"))
+    values = pd.Series(table[np.array(hits_keys)], dtype=np.dtype("i8")).astype(int)
     # print (values)
     misses_df = query_df[miss_mask].copy()
-
-    table_hits_mask = data_table["index"].apply(lambda ind: ind in values)
+    table_hits_mask = data_table["index"].apply(lambda ind: bool(ind in values.values))
+    print ("mask len",len (table_hits_mask))
     hits_table = data_table[table_hits_mask]
 
     # Theres no check here to make sure that values is actually in the same order
     # as hits_df, this may be an issue down the line if the order of dfs moving
     # stuff is not guaranteed
+    values_df = pd.DataFrame(values,columns=["index"])
 
-    chis_ideal_list = (
-        pd.DataFrame(values)
-        .merge(
-            hits_table,
-            left_on=0,
-            right_on="index",
-            suffixes=["_1", ""],
-            validate="1:1",
-        )["chis"]
-        .to_list()
+    merged_df = values_df.merge(
+        hits_table,
+        left_on="index",
+        right_on="index",
+        suffixes=["_1", ""],
+        validate="m:1",
     )
+
+    chis_ideal_list = (merged_df["chis"].to_list())
 
     if len(rotamer_rt_map.keys()) != 1:
         raise NotImplementedError("It happened again")
 
-    restype = rotamer_rt_map[rotamer_rt_map.keys()[0]].residue.type()
+    restype = rotamer_rt_map["PTR"].residue.type()
 
     hits_rmsd_list = process_hits_by_rmsd(
         restype,
@@ -297,8 +310,8 @@ def test_hash_table(
         restype, data_table["chis"].to_list(), misses_df["chis"].to_list()
     )
 
-    hits_df["rmsd_to_hit"] = hits_rmsd_list
-    misses_df["rmsd_to_closest"] = misses_rmsd_list
+    hits_df["rmsd_to_hit"] = pd.Series(hits_rmsd_list)
+    misses_df["rmsd_to_closest"] = pd.Series(misses_rmsd_list)
     return hits_df, misses_df
 
 
@@ -319,9 +332,3 @@ def build_test_rotamers_from_resname(residue_type_name, margin, granularity):
             np.linspace(start_chi3 - margin, start_chi3 + margin, granularity),
         )
     ]
-
-
-"/home/dzorine/projects/phos_binding/pilot_runs/loop_grafting/fragment_tables/inverse_rotamer/dicts/benchmarking_1_inv_rot_0.125_ang_2.5_deg.bin"
-"/home/dzorine/projects/phos_binding/pilot_runs/loop_grafting/fragment_tables/inverse_rotamer/dicts/benchmarking_1_inv_rot_0.25_ang_5.0_deg.bin"
-"/home/dzorine/projects/phos_binding/pilot_runs/loop_grafting/fragment_tables/inverse_rotamer/dicts/benchmarking_1_inv_rot_0.5_ang_10.0_deg.bin"
-"/home/dzorine/projects/phos_binding/pilot_runs/loop_grafting/fragment_tables/inverse_rotamer/dicts/benchmarking_1_inv_rot_1.0_ang_15.0_deg.bin"
