@@ -6,18 +6,7 @@ from dzutils.pyrosetta_utils.geometry.superposition_utilities import (
 )
 from dzutils.pyrosetta_utils import bonded_atoms, atom_indices_with_element
 
-pyrosetta.init(
-    """-out:level 100
-    -extra_res_fa /home/dzorine/phos_binding/p_compounds/residues/PTR.params
-    -packing:ex1
-    -packing:ex2
-"""
-    """
-    -packing:ex3
-    -packing:ex4
 
-"""
-)
 # pyrosetta.init(
 #     """-out:level 100
 #     -extra_res_fa /home/dzorine/phos_binding/p_compounds/residues/PTR.params
@@ -83,6 +72,18 @@ def rot_poses(resname, *super_atoms):
 
 
 def main():
+    pyrosetta.init(
+        """-out:level 100
+        -extra_res_fa /home/dzorine/phos_binding/p_compounds/residues/PTR.params
+        -packing:ex1
+        -packing:ex2
+    """
+        """
+        -packing:ex3
+        -packing:ex4
+
+    """
+    )
     p_res = pyr.core.conformation.Residue(
         pyr.core.pose.get_restype_for_pose(pyr.core.pose.Pose(), "PTR"), True
     )

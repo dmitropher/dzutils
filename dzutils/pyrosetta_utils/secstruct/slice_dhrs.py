@@ -3,7 +3,7 @@ import sys
 
 import pyrosetta
 
-from dzutils.pyrosetta_utils import run_pyrosetta_with_flags
+from dzutils.pyrosetta_utils.util import run_pyrosetta_with_flags
 from dzutils.pyrosetta_utils.secstruct.structure import (
     parse_structure_from_dssp,
 )
@@ -22,16 +22,16 @@ def main(pose_pdb, helix_number="", rosetta_flags_file=""):
     Can request the numbers of middle or last helices, or just the total
     count
     """
-    run_pyrosetta_with_flags(rosetta_flags_file)
+    run_pyrosetta_with_flags(rosetta_flags_file, mute=True)
     pose = pyrosetta.pose_from_pdb(pose_pdb)
     structs = parse_structure_from_dssp(pose, "H")
     size = len(structs)
     if helix_number.lower() == "t":
-        sys.stdout.write(size)
+        sys.stdout.write(str(size))
     if helix_number.lower() == "l":
-        sys.stdout.write(size - 1)
+        sys.stdout.write(str(size - 1))
     if helix_number.lower() == "m":
-        sys.stdout.write(size // 1 + size % 2)
+        sys.stdout.write(str(size // 2 + size % 2))
 
 
 if __name__ == "__main__":
