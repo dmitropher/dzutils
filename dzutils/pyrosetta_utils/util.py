@@ -64,13 +64,15 @@ def residue_from_name3(name, variant=None):
     )
 
 
-def run_pyrosetta_with_flags(flags_file_path):
+def run_pyrosetta_with_flags(flags_file_path, mute=False):
     if not flags_file_path:
-        pyrosetta.init()
+        pyrosetta.init("-mute all " if mute else "", silent=mute)
         return
     flags = read_flag_file(flags_file_path)
     flags_str = " ".join(flags.replace("\n", " ").split())
-    pyrosetta.init(flags_str)
+    pyrosetta.init(
+        f"-mute all {flags_str}" if mute else flags_str, silent=mute
+    )
 
 
 def residues_by_name(pose, *names, include_res=False):
