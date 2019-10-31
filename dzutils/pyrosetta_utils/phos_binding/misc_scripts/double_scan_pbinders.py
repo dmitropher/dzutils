@@ -104,13 +104,23 @@ def pose_fragments_to_pose_xforms(
     ]
 
 
+def load_dict(dict_path, key_type, value_type):
+    gp_dict = GDict(key_type, value_type)
+    gp_dict.load(dict_path)
+    return gp_dict
+
+
+def load_table(table_path):
+    table = pd.read_json(table_path)
+    return table
+
+
 def load_table_and_dict(table_path, dict_path, key_type, value_type):
     """
     return a tuple of table,dict
     """
-    gp_dict = GDict(key_type, value_type)
-    gp_dict.load(dict_path)
-    table = pd.read_json(table_path)
+    gp_dict = load_dict(dict_path, key_type, value_type)
+    table = load_table(table_path)
     return table, gp_dict
 
 

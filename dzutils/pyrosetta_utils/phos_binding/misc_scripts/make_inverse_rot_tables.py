@@ -12,6 +12,7 @@ import pyrosetta.rosetta as pyr
 import pandas as pd
 import getpy as gp
 import numpy as np
+import h5py
 from numba import jit
 
 from xbin import XformBinner as xb
@@ -29,6 +30,10 @@ from dzutils.pyrosetta_utils.phos_binding import (
 from dzutils.pyrosetta_utils.geometry.pose_xforms import (
     generate_pose_rt_between_res,
     RotamerRTArray,
+)
+from dzutils.pyrosetta_utils.geometry.homog import (
+    homog_relative_transform,
+    homog_from_four_points,
 )
 
 
@@ -198,12 +203,9 @@ def generate_rosetta_rotamer_chis(res_type):
         rot
         for rot in pyr.core.pack.rotamer_set.bb_independent_rotamers(res_type)
     ]
-    return zip(
-        *[
-            (tuple(rot.chi(chi) for chi in range(1, rot.nchi() + 1)), rot)
-            for rot in rots
-        ]
-    )
+    return [
+        tuple(rot.chi(chi) for chi in range(1, rot.nchi() + 1)) for rot in rots
+    ]
 
 
 def update_df_and_gp_dict(
@@ -335,27 +337,18 @@ def expand_rotamer_set(
         rotamer_set = rotamer_set.union(set(uint_rot_repr))
     return rotamer_set
 
-def build_inv_rot_table_from_rosetta_rots(
-    restype,
-    cart_resl=1,
-    ori_resl=15 ,
-    key_label="key_int",
-    chi_label="chis",
-    align_atom_label="alignment_atoms",
-    rt_label="rt"):
-    """
-    """
-    binner = xb(cart_resl=cart_resl, ori_resl=ori_resl)
 
-    chis, residues = generate_rosetta_rotamer_chis(restype)
+def rosetta_rot_data(restype):
 
-    logger.debug(f"working on rotamer count: {len(residues)}")
+    chis = generate_rosetta_rotamer_chis(restype)
+
+    logger.debug(f"working on rotamer count: {len(chis)}")
 
     residue = pyrosetta.rosetta.core.conformation.Residue(restype, True)
     possible_rt_bases = pres_bases(residue)
 
     rotamer_rt = RotamerRTArray(
-        residue=residue, target_atoms=("P", "P", "OH", "O2P"), inverse=True
+        residue=residue, target_atoms=possible_rt_bases[0], inverse=True
     )
 
     rts, chis_index, alignment_atoms = zip(
@@ -363,12 +356,60 @@ def build_inv_rot_table_from_rosetta_rots(
             (
                 rt_from_chis(rotamer_rt, *chi_set, target_atoms=atoms),
                 chi_set,
-                atoms,
+                np.array(atoms),
             )
-            for chi_set, res in zip(chis, residues)
+            for chi_set in chis
             for atoms in possible_rt_bases
         ]
     )
+
+    return rts, chis_index, alignment_atoms
+
+
+def write_hdf5_rotamer_hash_data(
+    path,
+    restype,
+    cart_resl=1,
+    ori_resl=15,
+    key_label="key_int",
+    chi_label="chis",
+    align_atom_label="alignment_atoms",
+    rt_label="rt",
+):
+    """
+    """
+    rts, chis_index, alignment_atoms = rosetta_rot_data(restype)
+    binner = xb(cart_resl=cart_resl, ori_resl=ori_resl)
+    keys = binner.get_bin_index(np.array(rts))
+    with h5py.File(path, "w") as f:
+        for label, data in zip(
+            ("index", key_label, chi_label, align_atom_label, rt_label),
+            (
+                [*range(1, len(chis_index) + 1)],
+                keys,
+                rts,
+                chis_index,
+                alignment_atoms,
+            ),
+        ):
+            np_data = np.array(data)
+            f.create_dataset(label, np_data.shape, data=np_data)
+
+
+def build_inv_rot_table_from_rosetta_rots(
+    restype,
+    cart_resl=1,
+    ori_resl=15,
+    key_label="key_int",
+    chi_label="chis",
+    align_atom_label="alignment_atoms",
+    rt_label="rt",
+):
+    """
+    """
+    rts, chis_index, alignment_atoms = rosetta_rot_data(restype)
+    binner = xb(cart_resl=cart_resl, ori_resl=ori_resl)
+
     keys = binner.get_bin_index(np.array(rts))
 
     # make the table to assign rotamers to
@@ -383,10 +424,34 @@ def build_inv_rot_table_from_rosetta_rots(
 
     return inv_rot_table
 
-def chis_array_to_rt_array(chis_array,rotamer_rt_array,target_atoms_list,base_atoms_list):
+
+def residue_chis_to_nerf_dofs(res_type):
+    """
+    Takes a residue type and builds dofs for the atoms in the chain based on the atoms in the chis
+
+    returns the dofs for each atom in the chain that leads from the first chi to the last one
+
+    Cannot detect branching
+    """
+    chi_atoms_vector = res_type.chi_atoms()
+
+    all_atom_chain = get_atom_chain_from_restype()
+
+
+def chis_array_to_rt_array(chis_array, dofs, stub_coords):
     """
     Converts an array of chis into an array of RTs
     """
+    dofs_array = np.full_like(chis_array, dofs)
+    stub_array = np.full_like(chis_array, stub_coords)
+
+    # meshgrid stuff
+
+    # nerf stuff
+
+    # slice off coords
+    stub1 = homog_from_four_points(stub_center, stub_a, stub_b, stub_c)
+    stub2 = homog_from_four_points(rot_center, rot_a, rot_b, rot_c)
 
 
 def rosetta_chis_to_hdf5(
@@ -395,13 +460,15 @@ def rosetta_chis_to_hdf5(
     base_atoms_list,
     cart_resl=1,
     ori_resl=15,
-    **hdf5_stuff):
+    **hdf5_stuff,
+):
     """
     Makes the rosetta chis for a residue_type into an hdf5 with RT, xbin key,and chis
     The metadata should specify the residue type in some way
     """
 
-def consolidate_hashmaps(map_1,map_2):
+
+def consolidate_hashmaps(map_1, map_2):
     """
     """
 
@@ -450,13 +517,11 @@ def main(
         -packing:ex2:level 1
         -packing:ex3:level 1
         -packing:ex4:level 1
+        -extra_res_fa /home/dzorine/phos_binding/params_files/PHY.params
     """
     )
 
-    restype = residue_type_from_name3(
-        "TYR",
-        variant=pyrosetta.rosetta.core.chemical.VariantType.PHOSPHORYLATION,
-    )
+    restype = residue_type_from_name3("PHY")
 
     inv_rot_table = build_inv_rot_table_from_rosetta_rots(
         restype,
@@ -465,11 +530,11 @@ def main(
         key_label="key_int",
         chi_label="chis",
         align_atom_label="alignment_atoms",
-        rt_label="rt"
+        rt_label="rt",
     )
- # .iloc[:500]
+    # .iloc[:500]
     inv_rot_table["index"] = inv_rot_table.index
-    inv_rot_table["cycle"] = 0 #pd.Series([0] * len(inv_rot_table.index))
+    inv_rot_table["cycle"] = 0  # pd.Series([0] * len(inv_rot_table.index))
     data_name = f"{run_name}_{angstrom_dist_res}_ang_{angle_res}_deg"
     inv_rot_table.name = data_name
 
@@ -485,10 +550,10 @@ def main(
 
     residue = pyrosetta.rosetta.core.conformation.Residue(restype, True)
     possible_rt_bases = pres_bases(residue)
-    binner = xb(cart_resl=angstrom_dist_res,ori_resl=angle_res)
+    binner = xb(cart_resl=angstrom_dist_res, ori_resl=angle_res)
 
     rotamer_rt = RotamerRTArray(
-        residue=residue, target_atoms=("P", "P", "OH", "O2P"), inverse=True
+        residue=residue, target_atoms=("P1", "P1", "O0", "O2P"), inverse=True
     )
 
     for i in range(1, cycle_depth + 1):

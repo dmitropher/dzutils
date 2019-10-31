@@ -14,7 +14,9 @@ from xbin import XformBinner as xb
 
 from dzutils.pyrosetta_utils import residue_type_from_name3
 
-from dzutils.pyrosetta_utils.geometry.superposition_utilities import superposition_pose
+from dzutils.pyrosetta_utils.geometry.superposition_utilities import (
+    superposition_pose,
+)
 
 from dzutils.pyrosetta_utils.phos_binding import (
     phospho_residue_inverse_rotamer_rts,
@@ -26,7 +28,11 @@ logger = logging.getLogger("make_inverse_rot_tables")
 logger.setLevel(logging.DEBUG)
 
 type_dict = {
-    "PTR": ("TYR", pyrosetta.rosetta.core.chemical.VariantType.PHOSPHORYLATION)
+    "PTR": (
+        "TYR",
+        pyrosetta.rosetta.core.chemical.VariantType.PHOSPHORYLATION,
+    ),
+    "PHY": "PHY",
 }
 
 
@@ -114,20 +120,23 @@ def value_to_pose(
             logger.debug(f"chis {chis}")
             logger.debug(f"table entry: {table_entry}")
 
+
 def atom_coords(pose):
-    coords  = pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
+    coords = pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
     for residue in pose.residues:
         for atom in residue.atoms():
             coords.append(atom.xyz())
     return coords
 
+
 def rotamer_rmsd(pose_1, pose_2, super=True):
     if super:
 
-        superposition_pose(pose_1,atom_coords(pose_1),atom_coords(pose_2))
+        superposition_pose(pose_1, atom_coords(pose_1), atom_coords(pose_2))
 
-
-        return pyrosetta.rosetta.core.scoring.all_atom_rmsd(pose_1, pose_2)
+        return pyrosetta.rosetta.core.scoring.all_atom_rmsd_nosuper(
+            pose_1, pose_2
+        )
     else:
         return pyrosetta.rosetta.core.scoring.all_atom_rmsd_nosuper(
             pose_1, pose_2
@@ -260,11 +269,11 @@ def test_hash_table(
     just the chis and the key
     """
     query_df, rotamer_rt_map = chi_list_to_query_df(test_data)
-
+    logger.debug("got query and rotamer")
     binner = xb(xbin_cart_resl, xbin_ori_resl)
     rts_array = np.array(query_df["RTs"].to_list())
     test_keys = binner.get_bin_index(rts_array)
-
+    logger.debug("generated keys to check table")
     hits_mask = table.contains(test_keys)
     miss_mask = hits_mask == False
 
@@ -272,17 +281,22 @@ def test_hash_table(
     hits_keys = test_keys[hits_mask]
     if data_table is None:
         pd.read_json(data_table_path)
-    values = pd.Series(table[np.array(hits_keys)], dtype=np.dtype("i8")).astype(int)
+        logger.debug("table read into memory")
+    values = pd.Series(
+        table[np.array(hits_keys)], dtype=np.dtype("i8")
+    ).astype(int)
     # print (values)
     misses_df = query_df[miss_mask].copy()
-    table_hits_mask = data_table["index"].apply(lambda ind: bool(ind in values.values))
-    print ("mask len",len (table_hits_mask))
+    table_hits_mask = data_table["index"].apply(
+        lambda ind: bool(ind in values.values)
+    )
+    print("mask len", len(table_hits_mask))
     hits_table = data_table[table_hits_mask]
 
     # Theres no check here to make sure that values is actually in the same order
     # as hits_df, this may be an issue down the line if the order of dfs moving
     # stuff is not guaranteed
-    values_df = pd.DataFrame(values,columns=["index"])
+    values_df = pd.DataFrame(values, columns=["index"])
 
     merged_df = values_df.merge(
         hits_table,
@@ -292,7 +306,7 @@ def test_hash_table(
         validate="m:1",
     )
 
-    chis_ideal_list = (merged_df["chis"].to_list())
+    chis_ideal_list = merged_df["chis"].to_list()
 
     if len(rotamer_rt_map.keys()) != 1:
         raise NotImplementedError("It happened again")
@@ -302,7 +316,7 @@ def test_hash_table(
     hits_rmsd_list = process_hits_by_rmsd(
         restype,
         chis_ideal_list,
-        hits_table["chis"].to_list(),
+        hits_df["chis"].to_list(),
         super=super_hits_before_rmsd,
     )
 
