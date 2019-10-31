@@ -369,6 +369,9 @@ def rosetta_rot_data(restype):
 def write_hdf5_rotamer_hash_data(
     path,
     restype,
+    rts,
+    chis_index,
+    alignment_atoms,
     cart_resl=1,
     ori_resl=15,
     key_label="key_int",
@@ -378,7 +381,6 @@ def write_hdf5_rotamer_hash_data(
 ):
     """
     """
-    rts, chis_index, alignment_atoms = rosetta_rot_data(restype)
     binner = xb(cart_resl=cart_resl, ori_resl=ori_resl)
     keys = binner.get_bin_index(np.array(rts))
     with h5py.File(path, "w") as f:
@@ -396,6 +398,38 @@ def write_hdf5_rotamer_hash_data(
             f.create_dataset(label, np_data.shape, data=np_data)
 
 
+def write_hdf5_rosetta_rotamer_hash_data(
+    path,
+    restype,
+    cart_resl=1,
+    ori_resl=15,
+    key_label="key_int",
+    chi_label="chis",
+    align_atom_label="alignment_atoms",
+    rt_label="rt",
+):
+    """
+    This is the utility that generates backbone dep rotamers and hashes them
+
+    Bin dimensions and hdf5 labels are configurable, but rotamer generation is
+    just whatever ex level rosetta has been set to before calling this
+    """
+    rts, chis_index, alignment_atoms = rosetta_rot_data(restype)
+    write_hdf5_rotamer_hash_data(
+        path,
+        restype,
+        rts,
+        chis_index,
+        alignment_atoms,
+        cart_resl=cart_resl,
+        ori_resl=ori_resl,
+        key_label=key_label,
+        chi_label=chi_label,
+        align_atom_label=align_atom_label,
+        rt_label=rt_label,
+    )
+
+
 def build_inv_rot_table_from_rosetta_rots(
     restype,
     cart_resl=1,
@@ -409,7 +443,6 @@ def build_inv_rot_table_from_rosetta_rots(
     """
     rts, chis_index, alignment_atoms = rosetta_rot_data(restype)
     binner = xb(cart_resl=cart_resl, ori_resl=ori_resl)
-
     keys = binner.get_bin_index(np.array(rts))
 
     # make the table to assign rotamers to
@@ -474,37 +507,34 @@ def consolidate_hashmaps(map_1, map_2):
 
 
 @click.command()
-@click.option("-o", "--res-out-dir")
 @click.option("-a", "--angle-res", default=15.0)
 @click.option("-d", "--angstrom-dist-res", default=1.0)
 @click.option("-r", "--run-name", default="inverse_ptr_exchi7_rotamers")
 @click.option("-e", "--erase/--no-erase", default=False)
-@click.option("-p", "--ramp/--no-ramp", default=False)
 @click.option("-m", "--metrics-out-dir", default=False)
-@click.option("-b", "--batch-factor", default=10000)
+@click.option(
+    "-b",
+    "--base-table/--dont-build",
+    default=False,
+    help="write the base table before expansion",
+)
 @click.option("-g", "--granularity-factor", default=15)
 @click.option("-c", "--cycle_depth", default=3)
 @click.option("-s", "--search-radius", default=5)
-
-# @click.option("-d","--rots-for)
 def main(
     run_name="inverse_ptr_exchi7_rotamers",
-    res_out_dir="",
     angstrom_dist_res=1,
     angle_res=15,
     erase=False,
     metrics_out_dir=False,
-    batch_factor=10000,
+    base_table=False,
     granularity_factor=15,
     cycle_depth=3,
     search_radius=5,
-    ramp=False,
 ):
 
-    db_path = (
-        "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables"
-    )
-    table_out_dir = f"{db_path}/inverse_rotamer/tables"
+    db_path = "/home/dzorine/phos_binding/fragment_tables"
+    table_out_dir = f"{db_path}/inverse_rotamer/hdf5/test_tables"
     data_name = f"{run_name}_{angstrom_dist_res}_ang_{angle_res}_deg"
 
     # save_table_as_json(table_out_dir, inv_rot_table, overwrite=erase)
@@ -517,45 +547,46 @@ def main(
         -packing:ex2:level 1
         -packing:ex3:level 1
         -packing:ex4:level 1
-        -extra_res_fa /home/dzorine/phos_binding/params_files/PHY.params
+        -extra_res_fa /home/dzorine/projects/phos_binding/params_files/p_loop_params/PHY_4_chi.params
     """
     )
 
     restype = residue_type_from_name3("PHY")
 
-    inv_rot_table = build_inv_rot_table_from_rosetta_rots(
-        restype,
-        cart_resl=angstrom_dist_res,
-        ori_resl=angle_res,
-        key_label="key_int",
-        chi_label="chis",
-        align_atom_label="alignment_atoms",
-        rt_label="rt",
-    )
-    # .iloc[:500]
-    inv_rot_table["index"] = inv_rot_table.index
-    inv_rot_table["cycle"] = 0  # pd.Series([0] * len(inv_rot_table.index))
-    data_name = f"{run_name}_{angstrom_dist_res}_ang_{angle_res}_deg"
-    inv_rot_table.name = data_name
+    rts, chis_index, alignment_atoms = rosetta_rot_data(restype)
+    binner = xb(cart_resl=angstrom_dist_res, ori_resl=angle_res)
+    keys = binner.get_bin_index(np.array(rts))
 
     # Make the base dictionary
     key_type = np.dtype("i8")
     value_type = np.dtype("i8")
     gp_dict = gp.Dict(key_type, value_type)
 
-    # build the key value pairs and fill dict
-    inv_rot_keys = np.array(inv_rot_table["key_int"], dtype=np.int64)
-    inv_rot_vals = np.array(inv_rot_table["index"], dtype=np.int64)
-    gp_dict[inv_rot_keys] = inv_rot_vals
+    indices = np.array([*range(1, len(chis_index) + 1)], dtype=np.dtype("i8"))
+    gp_dict[keys] = np.array(indices)
+
+    if base_table:
+        write_hdf5_rotamer_hash_data(
+            f"{table_out_dir}/{data_name}_base_table.hf5",
+            restype,
+            rts,
+            chis_index,
+            alignment_atoms,
+            angstrom_dist_res,
+            angle_res,
+        )
+        save_dict_as_bin(dict_out_dir, gp_dict, data_name, overwrite=erase)
 
     residue = pyrosetta.rosetta.core.conformation.Residue(restype, True)
     possible_rt_bases = pres_bases(residue)
     binner = xb(cart_resl=angstrom_dist_res, ori_resl=angle_res)
 
     rotamer_rt = RotamerRTArray(
-        residue=residue, target_atoms=("P1", "P1", "O0", "O2P"), inverse=True
+        residue=residue, target_atoms=pres_bases(residue)[0], inverse=True
     )
+    # NeRF, check if original, deposit -> after, write the finished table (also each cycle)
 
+    # Maybe don't even do this, just make a separate table expander script
     for i in range(1, cycle_depth + 1):
 
         batch_new_chi_ints = set()
