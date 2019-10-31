@@ -58,13 +58,13 @@ def scrape_rotamers_from_pdbs(name, *pdb_files):
 def main(pdb_files, residue_name3, out_dir):
 
     run_pyrosetta_with_flags(
-        "/home/dzorine/phos_binding/run_files/p_ligand_quiet.flags"
+        "/home/dzorine/projects/phos_binding/run_files/scrape_ptr.flags"
     )
 
     rotamers = scrape_rotamers_from_pdbs(residue_name3, *pdb_files)
     name_hash = hash(tuple(pdb_files))
     with open(
-        f"{out_dir if out_dir else os.cwd()}/scraped_{residue_name3}_rotamers_{name_hash}.json",
+        f"{out_dir if out_dir else os.getcwd()}/scraped_{residue_name3}_rotamers_{name_hash}.json",
         "w+",
     ) as f:
         dump(rotamers, f)
