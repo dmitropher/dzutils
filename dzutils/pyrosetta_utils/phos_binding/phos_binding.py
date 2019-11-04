@@ -177,7 +177,7 @@ def pres_bases(residue):
 
 
 def phospho_residue_inverse_rotamer_rts(
-    residue, rotamer_rt_array=None, alignment_atoms=False
+    residue=None, rotamer_rt_array=None, alignment_atoms=False
 ):
     """
     Returns the RTs from the phos group to bb
@@ -193,16 +193,27 @@ def phospho_residue_inverse_rotamer_rts(
     # pres bases here refers to the atoms that "target_atoms" is based off of
     # in the RotamerRTArray
     # sorry future people for the confusiont
-    possible_rt_bases = pres_bases(residue)
+    possible_rt_bases = []
 
     if rotamer_rt_array is None:
+
         if residue is None:
             raise ValueError(
                 "A RotamerRTArray or a residue must be provided to compute all RTs!"
             )
-        rotamer_rt_array = RotamerRTArray(
-            residue=residue, target_atoms=pres_bases[0], inverse=True
-        )
+        else:
+            possible_rt_bases = pres_bases(residue)
+            rotamer_rt_array = RotamerRTArray(
+                residue=residue, target_atoms=pres_bases[0], inverse=True
+            )
+    else:
+        if residue is not None:
+            raise ValueError(
+                "A RotamerRTArray or a residue must be provided to compute all RTs! But not both"
+            )
+        else:
+            possible_rt_bases = pres_bases(rotamer_rt_array.residue)
+
     output = []
     for base in possible_rt_bases:
         rotamer_rt_array.set_target_atoms(base)
