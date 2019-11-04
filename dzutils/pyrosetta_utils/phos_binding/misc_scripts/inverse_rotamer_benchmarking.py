@@ -5,6 +5,7 @@ import pyrosetta
 
 import numpy as np
 import pandas as pd
+import h5py
 
 # import getpy as gp
 # import scipy.spatial
@@ -20,6 +21,7 @@ from dzutils.pyrosetta_utils.geometry.superposition_utilities import (
 
 from dzutils.pyrosetta_utils.phos_binding import (
     phospho_residue_inverse_rotamer_rts,
+    pres_bases,
 )
 
 from dzutils.pyrosetta_utils.geometry.pose_xforms import RotamerRTArray
@@ -32,11 +34,14 @@ type_dict = {
         "TYR",
         pyrosetta.rosetta.core.chemical.VariantType.PHOSPHORYLATION,
     ),
-    "PHY": "PHY",
+    "PHY": ("PHY", None),
 }
 
 
 def get_residue_type_from_name(resname):
+    """
+    Helper func for getting resdiue type from global map
+    """
     try:
         name, variant = type_dict[resname]
         return residue_type_from_name3(name, variant=variant)
@@ -47,8 +52,40 @@ def get_residue_type_from_name(resname):
 
 
 def get_rotamer_residue_from_name(resname):
+    """
+    Helper func to build rosetta residue objects
+    """
     residue_type = get_residue_type_from_name(resname)
     return pyrosetta.rosetta.core.conformation.Residue(residue_type, False)
+
+
+base_atom_dict = {
+    "PTR": pres_bases(get_rotamer_residue_from_name("PTR")),
+    "PHY": pres_bases(get_rotamer_residue_from_name("PHY")),
+}
+
+
+def get_base_atoms_from_name(resname):
+    """
+    helper func for accessing the global type dict
+    """
+    try:
+        atom_list = base_atom_dict[resname]
+        return atom_list
+    except KeyError as e:
+        print("")
+        print(e)
+        raise
+
+
+def residue_inverse_rotamer_rts(rotamer_rt_array, base_atoms_list):
+    """
+    """
+    output = []
+    for base in base_atoms_list:
+        rotamer_rt_array.set_target_atoms(base)
+        output.append(np.array(rotamer_rt_array))
+    return output
 
 
 def set_rotamer_chis(rot, *chis):
@@ -180,8 +217,8 @@ def kd_tree_from_rotamer_table(chi_table, *fields):
 
 
 def kd_tree_from_chis(chis_list):
-    unique_chis = np.array(list(k for k, _ in groupby(chis_list)))
-    return KDTree(unique_chis), unique_chis
+    chis_array = np.array(chis_list)
+    return KDTree(chis_array), chis_array
 
 
 def process_misses(restype, ideal_chis_list, query_chis_list):
@@ -195,6 +232,7 @@ def process_misses(restype, ideal_chis_list, query_chis_list):
     query_res_pose.append_residue_by_bond(query_res)
 
     rmsd_list = []
+    ideal_chi_list = []
 
     for chis in query_chis_list:
         ideal_chis_index = nearest_chi_tree.query(chis)[1]
@@ -204,7 +242,8 @@ def process_misses(restype, ideal_chis_list, query_chis_list):
         rmsd_list.append(
             rotamer_rmsd(ideal_res_pose, query_res_pose, super=super)
         )
-    return rmsd_list
+        ideal_chi_list.append(ideal_chis)
+    return rmsd_list, ideal_chi_list
 
 
 def chi_list_to_query_df(chi_data_list):
@@ -245,14 +284,50 @@ def chi_list_to_query_df(chi_data_list):
     return query_df, rotamer_rt_map
 
 
+def chi_list_to_query(chi_data_list):
+    """
+    Convert rotamer data list to a dataframe with chis and RTs (for all P bases)
+
+    Takes test rotamer data in the form [(resname,chi_1,...,chi_n),...,(etc)]
+    """
+    rt_chi_key_map = {}
+    rotamer_rt_map = {}
+    for rot_info in chi_data_list:
+        resname = rot_info[0]
+
+        if resname not in rt_chi_key_map.keys():
+            residue = get_rotamer_residue_from_name(resname)
+            rotamer_rt_map[resname] = RotamerRTArray(
+                residue=residue,
+                target_atoms=get_base_atoms_from_name(resname)[0],
+                inverse=True,
+            )
+            rt_chi_key_map[resname] = {"chis": [], "RTs": []}
+        rotamer_rt_map[resname].set_all_chi(*rot_info[1:])
+        rts = residue_inverse_rotamer_rts(
+            rotamer_rt_map[resname], get_base_atoms_from_name(resname)
+        )
+        rt_chi_key_map[resname]["RTs"].extend(rts)
+        rt_chi_key_map[resname]["chis"].extend(
+            [tuple(rot_info[1:])] * len(rts)
+        )
+
+    query_rts = []
+    query_chis = []
+    query_resnames = []
+    for resname in rt_chi_key_map:
+        query_rts.extend(rt_chi_key_map[resname]["RTs"])
+        query_chis.extend(rt_chi_key_map[resname]["chis"])
+        query_resnames.extend([resname] * len(rt_chi_key_map[resname]["chis"]))
+    return query_resnames, query_rts, query_chis, rotamer_rt_map
+
+
 def test_hash_table(
     table,
     test_data,
     xbin_cart_resl=1,
     xbin_ori_resl=15,
     hdf5_path="",
-    data_table_index_conversion="from_chis",
-    data_table_rotamer_fields=("chis",),
     super_hits_before_rmsd=True,
 ):
     """
@@ -267,64 +342,69 @@ def test_hash_table(
     misses should have rmsd to the closest "ideal" query, or if not provided
     just the chis and the key
     """
-    query_df, rotamer_rt_map = chi_list_to_query_df(test_data)
+    query_resnames, query_rts, query_chis, rotamer_rt_map = chi_list_to_query(
+        test_data
+    )
     logger.debug("got query and rotamer")
     binner = xb(xbin_cart_resl, xbin_ori_resl)
-    rts_array = np.array(query_df["RTs"].to_list())
+    rts_array = np.array(query_rts)
     test_keys = binner.get_bin_index(rts_array)
     logger.debug("generated keys to check table")
     hits_mask = table.contains(test_keys)
+
     miss_mask = hits_mask == False
 
-    hits_df = query_df[hits_mask].copy()
     hits_keys = test_keys[hits_mask]
-    if data_table is None:
-        pd.read_json(data_table_path)
-        logger.debug("table read into memory")
-    values = pd.Series(
-        table[np.array(hits_keys)], dtype=np.dtype("i8")
-    ).astype(int)
-    # print (values)
-    misses_df = query_df[miss_mask].copy()
-    table_hits_mask = data_table["index"].apply(
-        lambda ind: bool(ind in values.values)
-    )
-    print("mask len", len(table_hits_mask))
-    hits_table = data_table[table_hits_mask]
+    logger.debug(f"hits found: {len(hits_keys)} out of {len(test_keys)}")
 
-    # Theres no check here to make sure that values is actually in the same order
-    # as hits_df, this may be an issue down the line if the order of dfs moving
-    # stuff is not guaranteed
-    values_df = pd.DataFrame(values, columns=["index"])
+    values = table[hits_keys]
 
-    merged_df = values_df.merge(
-        hits_table,
-        left_on="index",
-        right_on="index",
-        suffixes=["_1", ""],
-        validate="m:1",
-    )
+    chis_ideal_list = []
 
-    chis_ideal_list = merged_df["chis"].to_list()
+    with h5py.File(hdf5_path, "r") as f:
+        for index in values:
+            chis_ideal_list.append(f["chis"][index])
+        ideal_chis_for_kd = f["ideal_chis"][:]
 
     if len(rotamer_rt_map.keys()) != 1:
         raise NotImplementedError("It happened again")
 
-    restype = rotamer_rt_map["PTR"].residue.type()
-
+    restype = rotamer_rt_map["PHY"].residue.type()
+    hits_chis = np.array(query_chis)[hits_mask]
     hits_rmsd_list = process_hits_by_rmsd(
         restype,
-        chis_ideal_list,
-        hits_df["chis"].to_list(),
+        list(chis_ideal_list),
+        list(hits_chis),
         super=super_hits_before_rmsd,
     )
-
-    misses_rmsd_list = process_misses(
-        restype, data_table["chis"].to_list(), misses_df["chis"].to_list()
+    miss_chis = np.array(query_chis)[miss_mask]
+    kd_tree_chis = np.unique(np.array(ideal_chis_for_kd), axis=0)
+    misses_rmsd_list, matched_chi_list = process_misses(
+        restype, kd_tree_chis, miss_chis
     )
 
-    hits_df["rmsd_to_hit"] = pd.Series(hits_rmsd_list)
-    misses_df["rmsd_to_closest"] = pd.Series(misses_rmsd_list)
+    # make the return dfs here:
+    hits_df = pd.DataFrame(
+        {
+            "key": hits_keys,
+            "chis": list(hits_chis),
+            "ideal_chis": chis_ideal_list,
+            "rt": list(rts_array[hits_mask]),
+            "resname": ["PHY"] * len(hits_chis),
+            "index": values,
+            "rmsd_to_hit": hits_rmsd_list,
+        }
+    )
+    misses_df = pd.DataFrame(
+        {
+            "key": test_keys[miss_mask],
+            "chis": list(miss_chis),
+            "ideal_chis": matched_chi_list,
+            "rt": list(rts_array[miss_mask]),
+            "resname": ["PHY"] * len(miss_chis),
+            "rmsd_to_ideal": misses_rmsd_list,
+        }
+    )
     return hits_df, misses_df
 
 

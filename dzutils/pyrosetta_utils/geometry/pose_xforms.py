@@ -275,33 +275,6 @@ class RotamerRTArray(_np.ndarray):
         # Call the parent's __setstate__ with the other tuple elements.
         super(RotamerRTArray, self).__setstate__(state[0:-5])
 
-    # def _recompute_xform(self):
-    #     """
-    #     Utility function for when the chis are reset
-    #     """
-    #     _np.place(
-    #         self,
-    #         _np.ones_like(self),
-    #         _np.asarray(
-    #             homog_relative_transform(
-    #                 homog_from_residue(self.residue,
-    #                     *(
-    #                             self._target_atoms
-    #                             if self._inverse
-    #                             else self._base_atoms
-    #
-    #                     )
-    #                 ),
-    #                 homog_from_residue(self.residue,
-    #                     *(
-    #                             self._base_atoms
-    #                             if self._inverse
-    #                             else self._target_atoms
-    #                         )
-    #                 ),
-    #             )
-    #         ),
-    #     )
     def _recompute_xform(self, cached_base=None):
         """
         Utility function for when the chis are reset
@@ -346,6 +319,20 @@ class RotamerRTArray(_np.ndarray):
         #     )
         # )
         # _np.place(self, self._mask, _np.asarray(rt_to_homog(rt)))
+
+    def _get_xyz(self, atom_list):
+        return _np.array(
+            [
+                [xyz for xyz in self.residue.xyz(atom_name)]
+                for atom_name in atom_list
+            ]
+        )
+
+    def get_base_xyz(self):
+        return self._get_xyz(self.base_atoms[1:])
+
+    def get_target_xyz(self):
+        return self._get_xyz(self._target_atoms[1:])
 
     def set_target_atoms(self, atoms):
         """
