@@ -94,6 +94,7 @@ def write_hdf5_rotamer_hash_data(
     align_atom_label="alignment_atoms",
     rt_label="rt",
     ideal=False,
+    res_name="",
 ):
     """
     """
@@ -115,6 +116,8 @@ def write_hdf5_rotamer_hash_data(
         if ideal:
             np_data = np.array(chis_index)
             f.create_dataset("ideal_chis", np_data.shape, data=np_data)
+        f[chi_label].attrs["num_chis"] = chis_index.shape[1]
+        f[chi_label].attrs["residue_name"] = restype.name()
 
 
 def write_hdf5_rosetta_rotamer_hash_data(
@@ -148,6 +151,7 @@ def write_hdf5_rosetta_rotamer_hash_data(
         align_atom_label=align_atom_label,
         rt_label=rt_label,
         ideal=ideal,
+        res_name=restype.name(),
     )
 
 
@@ -211,8 +215,8 @@ def main(
         -extra_res_fa /home/dzorine/projects/phos_binding/params_files/p_loop_params/PHY_4_chi.params
         """
     )
-
-    restype = residue_type_from_name3("PHY")
+    resname = "PHY"
+    restype = residue_type_from_name3(resname)
 
     rts, chis_index, alignment_atoms = rosetta_rot_data(restype)
     binner = xb(cart_resl=angstrom_dist_res, ori_resl=angle_res)
@@ -234,6 +238,7 @@ def main(
         angstrom_dist_res,
         angle_res,
         ideal=ideal,
+        res_name=resname,
     )
     save_dict_as_bin(dict_out_dir, gp_dict, data_name, overwrite=erase)
 
