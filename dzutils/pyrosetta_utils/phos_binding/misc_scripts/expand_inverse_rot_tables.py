@@ -1,40 +1,29 @@
-from os import makedirs
-from os.path import isfile, isdir
-import logging
+from os.path import isfile
 from itertools import product, compress
 import logging
 
+# external
 import click
+import numpy as np
+import h5py
+import pandas as pd
 
+# rosetta
 import pyrosetta
 import pyrosetta.rosetta as pyr
 
-import pandas as pd
+# AP Moyer
 import getpy as gp
-import numpy as np
-import h5py
-from numba import jit
+from nerf import iNeRF, NeRF
 
+# Will Sheffler
 from xbin import XformBinner as xb
+from homog import hstub
 
-from dzutils.pyrosetta_utils import (
-    residue_type_from_name3,
-    get_rotamer_pose_from_residue_type,
-)
-
-from dzutils.pyrosetta_utils.phos_binding import (
-    phospho_residue_inverse_rotamer_rts,
-    pres_bases,
-)
-
-from dzutils.pyrosetta_utils.geometry.pose_xforms import (
-    generate_pose_rt_between_res,
-    RotamerRTArray,
-)
-from dzutils.pyrosetta_utils.geometry.homog import (
-    homog_relative_transform,
-    homog_from_four_points,
-)
+# dzutils
+from dzutils.pyrosetta_utils import residue_type_from_name3
+from dzutils.pyrosetta_utils.phos_binding import pres_bases
+from dzutils.pyrosetta_utils.geometry.pose_xforms import RotamerRTArray
 
 
 logger = logging.getLogger("make_inverse_rot_tables")
@@ -464,14 +453,79 @@ def build_inv_rot_table_from_rosetta_rots(
     return inv_rot_table
 
 
-def get_atom_chain_from_restype(res_type, base_atoms, target_atoms):
+def get_atom_chain_from_restype(res_type, *extra_atoms):
     """
     """
+    chi_atoms = res_type.chi_atoms()
+    # all_atoms = [*list(chi_atoms), extra_atoms]
+
+    # Dummy pose and residue to get an atom tree to play with
+    res = pyrosetta.rosetta.core.conformation.Residue(res_type, True)
+    pose = pyrosetta.rosetta.core.pose.Pose()
+    pose.append_residue_by_bond(res)
+    # got our atom tree, but can't delete the pose because of the way it works
+    at = pose.atom_tree()
+
+    chain_atom_list = []
+    for n in range(1, res_type.natoms() + 1):
+        found = False
+        katom = at.atom(pyrosetta.rosetta.core.id.AtomID(n, 1))
+        for atoms in chi_atoms:
+            for chi_a in atoms:
+                if (
+                    katom.downstream(
+                        at.atom(pyrosetta.rosetta.core.id.AtomID(chi_a, 1))
+                    )
+                    or n == chi_a
+                ):
+                    chain_atom_list.append(n)
+                    found = True
+                    break
+            if found:
+                break
+    if extra_atoms:
+        found = False
+        katom = at.atom(pyrosetta.rosetta.core.id.AtomID(n, 1))
+        for atoms in extra_atoms:
+            if (
+                katom.downstream(
+                    at.atom(pyrosetta.rosetta.core.id.AtomID(chi_a, 1))
+                )
+                or n == chi_a
+            ):
+                if not n in chain_atom_list:
+                    chain_atom_list.append(n)
+                    found = True
+                    break
+
+    return chain_atom_list
 
 
-def compute_dofs(rotamer_rt_array, atom_chain):
+def atom_chain_to_xyzs(rotamer_rt_array, atom_chain):
     """
     """
+    chi_atoms = rotamer_rt_array.residue.type().chi_atoms()
+    xyzs = rotamer_rt_array.get_xyz(atom_chain)
+    mask = [
+        any(
+            all(atom in chis for atom in atom_chain[i : i + 4])
+            for chis in chi_atoms
+        )
+        for i in range(len(atom_chain) - 3)
+    ]
+    return xyzs, mask
+
+
+def compute_dofs(rotamer_rt_array, atom_chain, degrees=True):
+    """
+    defaults to degrees, uses iNeRF
+    """
+    xyzs, mask = atom_chain_to_xyzs(rotamer_rt_array, atom_chain)
+    dof_array = iNeRF(
+        xyzs[:3][np.newaxis, :], xyzs[3:][np.newaxis, :], degrees=degrees
+    )
+
+    return dof_array, mask
 
 
 def rotamer_rt_array_to_nerf_dofs_template(rotamer_rt_array, target_atom_list):
@@ -486,23 +540,25 @@ def rotamer_rt_array_to_nerf_dofs_template(rotamer_rt_array, target_atom_list):
     Also returns a mask of which chis are actually configurable (vs dummy chis
     to keep the atom chain connected)
     """
-    chi_atoms_vector = rotamer_rt_array.residue.type.chi_atoms()
-    base_atoms = ("N", "CA", "CA")  # FIXME
+    # chi_atoms_vector = rotamer_rt_array.residue.type().chi_atoms()
+    # ("N", "CA", "CA")  # FIXME
     nerf_dofs = []
     chi_masks = []
     for target_atoms in target_atom_list:
         atom_chain = get_atom_chain_from_restype(
-            rotamer_rt_array, base_atoms, target_atoms, chi_atoms_vector
+            rotamer_rt_array.residue.type(), *target_atoms
         )
+        stub_mask = [a in target_atoms for a in atom_chain]
         dofs, mask = compute_dofs(rotamer_rt_array, atom_chain)
+
         nerf_dofs.append(dofs)
         chi_masks.append(mask)
 
-    return nerf_dofs, chi_masks
+    return nerf_dofs, chi_masks, stub_mask
 
 
 def chis_array_to_rt_array(
-    chis_array, dofs_templates, dofs_masks, stub_coords
+    chis_array, dofs_templates, dofs_masks, target_stub_masks, stub_coords
 ):
     """
     Converts an array of chis into an array of RTs
@@ -515,16 +571,65 @@ def chis_array_to_rt_array(
     (also the stub coordinates of the NeRF)
 
     """
-    dofs_array = np.full_like(chis_array, dofs)
-    stub_array = np.full_like(chis_array, stub_coords)
+    # apply chis to each dof in array
+    all_rts = []
 
-    # meshgrid stuff
+    for i in range(stub_coords.shape[0]):
+        base_xform = hstub(
+            stub_coords[i][:, 0], stub_coords[i][:, 1], stub_coords[i][:, 2]
+        )
+        for dof_template, mask, target_stub_mask in zip(
+            dofs_templates, dofs_masks, target_stub_masks
+        ):
+            filled_dofs = np.tile(dof_template, (chis_array.shape[0], 1, 1))
+            filled_dofs[:, mask, 2] = chis_array
+            abcs = np.tile(stub_coords[i], (chis_array.shape[0], 1, 1))
+            xyzs = NeRF(abcs, filled_dofs, degrees=True)
+            three_atom_stubs = xyzs[:, target_stub_mask[3:], :]
+            target_xforms = hstub(
+                three_atom_stubs[:, 0, :],
+                three_atom_stubs[:, 1, :],
+                three_atom_stubs[:, 2, :],
+            )
+            base_xforms = np.tile(base_xform, (len(target_xforms), 1, 1))
+            rts = np.linalg.inv(target_xforms) @ base_xforms
+            all_rts.append(rts)
+    return np.array(all_rts)
 
-    # nerf stuff
 
-    # slice off coords
-    stub1 = homog_from_four_points(stub_center, stub_a, stub_b, stub_c)
-    stub2 = homog_from_four_points(rot_center, rot_a, rot_b, rot_c)
+def get_dof_tempates_from_rotamer_rt_array(rotamer_rt_array, target_atoms=[]):
+    """
+    """
+    dof_sets = []
+    mask_sets = []
+    targ_mask_sets = []
+    for base in target_atoms:
+        atom_chain = get_atom_chain_from_restype(
+            rotamer_rt_array.residue.type(), *base
+        )
+        xyz_coords, mask = atom_chain_to_xyzs(rotamer_rt_array, atom_chain)
+        targ_mask = [a in base for a in atom_chain]
+        dofs = iNeRF(
+            xyz_coords[:3][np.newaxis, :],
+            xyz_coords[3:][np.newaxis, :],
+            degrees=False,
+        )
+        dof_sets.append(dofs)
+        mask_sets.append(mask)
+        targ_mask_sets.append(targ_mask)
+    return
+
+
+def get_new_key_mask_from_hashmap(
+    keys, hashmap_path, key_type=np.dtype("i8"), value_type=np.dtype("i8")
+):
+    """
+    """
+    key_type = np.dtype("i8")
+    value_type = np.dtype("i8")
+    hashmap = gp.Dict(key_type, value_type)
+    hashmap.load(hashmap_path)
+    return hashmap.contains(np.array(keys)) == False
 
 
 @click.command()
@@ -534,6 +639,7 @@ def chis_array_to_rt_array(
 @click.option("-d", "--angstrom-dist-res", default=1.0)
 @click.option("-r", "--run-name", default="inverse_ptr_exchi7_rotamers")
 @click.option("-e", "--erase/--no-erase", default=False)
+@click.option("-o", "--output-name", default="")
 @click.option(
     "-n",
     "--index-range",
@@ -552,6 +658,7 @@ def main(
     index_range="all",
     granularity_factor=15,
     search_radius=5,
+    output_name="",
 ):
 
     # defint working dirs here:
@@ -561,9 +668,11 @@ def main(
         start, end = index_range.split("-")
     with h5py.File(hdf5_store, "r") as f:
         store_chis = f["chis"][start:end]
+        store_keys = f["key_int"][start:end]
+        store_rts = f["rt"][start:end]
         res_type_name = f["chis"].attrs["residue_name"]
         num_chis = f["chis"].attrs["num_chis"]
-        base_atoms = f["base_atoms"]
+        store_alignment_atoms = f["alignment_atoms"]
 
     packed_store_chis = bit_pack_rotamers(store_chis, num_chis)
     packed_store_chis_unique = np.fromiter(set(packed_store_chis))
@@ -586,94 +695,79 @@ def main(
 
     res_type = residue_type_from_name3(res_type_name)
     residue = pyrosetta.rosetta.core.conformation.Residue(res_type, True)
+    base_atoms = pres_bases(residue)
     rotamer_rt_array = RotamerRTArray(
         residue=residue, target_atoms=base_atoms[0], inverse=True
     )
-    dofs_templates, dofs_masks = rotamer_rt_array_to_nerf_dofs_template(
-        rotamer_rt_array, list(base_atoms)
+    dof_sets = []
+    mask_sets = []
+    targ_mask_sets = []
+    for base in base_atoms:
+        atom_chain = get_atom_chain_from_restype(residue.type(), *base)
+        xyz_coords, mask = atom_chain_to_xyzs(rotamer_rt_array, atom_chain)
+        targ_mask = [a in base for a in atom_chain]
+        dofs = iNeRF(
+            xyz_coords[:3][np.newaxis, :],
+            xyz_coords[3:][np.newaxis, :],
+            degrees=False,
+        )
+        dof_sets.append(dofs)
+        mask_sets.append(mask)
+        targ_mask_sets.append(targ_mask)
+    dof_sets, mask_sets, targ_mask_sets = get_dof_tempates_from_rotamer_rt_array(
+        rotamer_rt_array, base_atoms
     )
-    stub_coords = rotamer_rt_array.get_base_xyz()
-    chis_array, align_atoms_array, rts = chis_array_to_rt_array(
-        new_chis, dofs_templates, dofs_masks, stub_coords
+    stub_coords_array = np.array([rotamer_rt_array.get_base_xyz()])
+    rts = chis_array_to_rt_array(
+        new_chis, dof_sets, mask_sets, targ_mask_sets, stub_coords_array
     )
+
+    # TODO make a table ready array of alignment atoms and chis
+
     binner = xb(cart_resl=angstrom_dist_res, ori_resl=angle_res)
     keys = binner.get_bin_index(np.array(rts))
     key_type = np.dtype("i8")
     value_type = np.dtype("i8")
-    hashmap = gp.Dict(key_type, value_type)
-    hashmap.load(hashmap_path)
-    new_keys_mask = hashmap.contains(np.array(keys)) == False
+    new_keys_mask = get_new_key_mask_from_hashmap(
+        keys, hashmap_path, key_type=key_type, value_type=value_type
+    )
 
     # apply mask to the diferrent thingies, gives you the actual new stuff to add
+    rts_to_save = np.concatenate(
+        (rts[new_keys_mask][np.newaxis, :], store_rts[np.newaxis, :]), axis=1
+    )
+    keys_to_save = np.concatenate(
+        (keys[new_keys_mask][np.newaxis, :], store_keys[np.newaxis, :]), axis=1
+    )
+    chis_to_save = np.concatenate(
+        (new_chis[new_keys_mask][np.newaxis, :], store_chis[np.newaxis, :]),
+        axis=1,
+    )
 
-    # Make a store of just the new stuff
+    new_align_atoms = np.repeat(np.array(base_atoms), len(new_chis), axis=0)
 
-    #
-    #     batch_new_chi_ints = set()
-    #     batch_new_chis = []
-    #     chi_list = inv_rot_table[inv_rot_table["cycle"] == i - 1][
-    #         "chis"
-    #     ].to_list()
-    #     chi_array = np.asarray(chi_list, np.float64)
-    #     logger.debug(chi_array)
-    #     logger.debug(i * granularity_factor)
-    #     batch_new_chi_ints = expand_rotamer_set(
-    #         chi_array,
-    #         search_radius,
-    #         (i * granularity_factor if ramp else granularity_factor),
-    #         np.float64(0.01),
-    #     )
-    #     packed_chis = np.fromiter(batch_new_chi_ints, np.uint64)
-    #     chi_sets = unpack_chis(
-    #         packed_chis, num_chis=3, round_fraction=np.float(0.01)
-    #     )
-    #     # logger.debugf"batch: {count} exceeds factor: {batch_factor}")
-    #     logger.debug(len(chi_sets))
-    #     logger.debug(chi_sets)
-    #     logger.debug(possible_rt_bases)
-    #     if not len(chi_sets):
-    #         break
-    #     batch_new_atoms, batch_new_chis, batch_new_rts = [[], [], []]
-    #
-    #     for chis in chi_sets:
-    #         for atoms in possible_rt_bases:
-    #             batch_new_atoms.append(atoms)
-    #             batch_new_chis.append(tuple(chis))
-    #             batch_new_rts.append(
-    #                 rt_from_chis(rotamer_rt, *chis, target_atoms=atoms)
-    #             )
-    #     logger.debug("new rts to be xbinned")
-    #     logger.debug(f"{np.array(batch_new_rts)}")
-    #     batch_new_keys = binner.get_bin_index(np.array(batch_new_rts))
-    #
-    #     inv_rot_table, gp_dict = update_df_and_gp_dict(
-    #         inv_rot_table,
-    #         gp_dict,
-    #         i,
-    #         batch_new_chis,
-    #         batch_new_keys,
-    #         batch_new_atoms,
-    #         batch_new_rts,
-    #     )
-    #     data_name = (
-    #         f"{run_name}_{angstrom_dist_res}_ang_{angle_res}_deg_cycle_{i}"
-    #     )
-    #     inv_rot_table.name = data_name
-    #     save_table_as_json(table_out_dir, inv_rot_table, overwrite=erase)
-    #     save_dict_as_bin(dict_out_dir, gp_dict, data_name, overwrite=erase)
-    #
-    # db_path = (
-    #     "/home/dzorine/phos_binding/pilot_runs/loop_grafting/fragment_tables"
-    # )
-    # table_out_dir = f"{db_path}/inverse_rotamer/tables"
-    # data_name = f"{run_name}_{angstrom_dist_res}_ang_{angle_res}_deg"
-    # inv_rot_table.name = data_name
-    # save_table_as_json(table_out_dir, inv_rot_table, overwrite=erase)
-    #
-    # dict_out_dir = f"{db_path}/inverse_rotamer/dicts/"
-    #
-    # save_dict_as_bin(dict_out_dir, gp_dict, data_name, overwrite=erase)
-    #
+    align_atoms_to_save = np.concatenate(
+        (
+            new_align_atoms[new_keys_mask][np.newaxis, :],
+            store_alignment_atoms[np.newaxis, :],
+        ),
+        axis=1,
+    )
+
+    index_vals_to_save = np.arange(0, len(chis_to_save))
+    # Make the base dictionary
+    new_hashmap = gp.Dict(key_type, value_type)
+    new_hashmap[keys_to_save] = index_vals_to_save
+
+    output_hf5_path = "data_store.hf5"
+    with h5py.File(output_hf5_path, "r") as f:
+        f.create_dataset("index", data=index_vals_to_save)
+        f.create_dataset("chis", data=chis_to_save)
+        f.create_dataset("key_int", data=keys_to_save)
+        f.create_dataset("rt", data=rts_to_save)
+        f.create_dataset("alignment_atoms", data=align_atoms_to_save)
+        f["chis"].attrs["residue_name"] = res_type_name
+        f["chis"].attrs["num_chis"] = num_chis
 
 
 if __name__ == "__main__":

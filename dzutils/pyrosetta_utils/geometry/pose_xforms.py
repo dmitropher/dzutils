@@ -320,7 +320,7 @@ class RotamerRTArray(_np.ndarray):
         # )
         # _np.place(self, self._mask, _np.asarray(rt_to_homog(rt)))
 
-    def _get_xyz(self, atom_list):
+    def get_xyz(self, atom_list):
         return _np.array(
             [
                 [xyz for xyz in self.residue.xyz(atom_name)]
@@ -329,10 +329,10 @@ class RotamerRTArray(_np.ndarray):
         )
 
     def get_base_xyz(self):
-        return self._get_xyz(self.base_atoms[1:])
+        return self.get_xyz(self._base_atoms[1:])
 
     def get_target_xyz(self):
-        return self._get_xyz(self._target_atoms[1:])
+        return self.get_xyz(self._target_atoms[1:])
 
     def set_target_atoms(self, atoms):
         """
