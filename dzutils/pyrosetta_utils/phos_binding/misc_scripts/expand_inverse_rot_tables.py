@@ -501,10 +501,13 @@ def get_atom_chain_from_restype(res_type, *extra_atoms):
     return chain_atom_list
 
 
-def atom_chain_to_xyzs(rotamer_rt_array, atom_chain):
+def atom_chain_to_xyzs(rotamer_rt_array, atom_chain, *extra):
     """
     """
     chi_atoms = rotamer_rt_array.residue.type().chi_atoms()
+    reduced_extra = [a for a in extra if not a in atom_chain]
+    # print(reduced_extra)
+    atom_chain.extend(reduced_extra)
     xyzs = rotamer_rt_array.get_xyz(atom_chain)
     mask = [
         any(
@@ -594,7 +597,8 @@ def chis_array_to_rt_array(
             base_xforms = np.tile(base_xform, (len(target_xforms), 1, 1))
             rts = np.linalg.inv(target_xforms) @ base_xforms
             all_rts.append(rts)
-    return np.array(all_rts)
+    all_rts_array = np.concatenate(all_rts)
+    return all_rts_array
 
 
 def get_dof_tempates_from_rotamer_rt_array(rotamer_rt_array, target_atoms=[]):
@@ -607,7 +611,9 @@ def get_dof_tempates_from_rotamer_rt_array(rotamer_rt_array, target_atoms=[]):
         atom_chain = get_atom_chain_from_restype(
             rotamer_rt_array.residue.type(), *base
         )
-        xyz_coords, mask = atom_chain_to_xyzs(rotamer_rt_array, atom_chain)
+        xyz_coords, mask = atom_chain_to_xyzs(
+            rotamer_rt_array, atom_chain, *base
+        )
         targ_mask = [a in base for a in atom_chain]
         dofs = iNeRF(
             xyz_coords[:3][np.newaxis, :],
@@ -617,7 +623,7 @@ def get_dof_tempates_from_rotamer_rt_array(rotamer_rt_array, target_atoms=[]):
         dof_sets.append(dofs)
         mask_sets.append(mask)
         targ_mask_sets.append(targ_mask)
-    return
+    return dof_sets, mask_sets, targ_mask_sets
 
 
 def get_new_key_mask_from_hashmap(
@@ -633,7 +639,7 @@ def get_new_key_mask_from_hashmap(
 
 
 @click.command()
-@click.argument("hashmap", type=click.Path(exists=True))
+@click.argument("hashmap_path", type=click.Path(exists=True))
 @click.argument("hdf5_store", type=click.Path(exists=True))
 @click.option("-a", "--angle-res", default=15.0)
 @click.option("-d", "--angstrom-dist-res", default=1.0)
@@ -665,17 +671,18 @@ def main(
 
     start, end = [None, None]
     if index_range != "all":
-        start, end = index_range.split("-")
+        start, end = [int(val) for val in index_range.split("-")]
     with h5py.File(hdf5_store, "r") as f:
         store_chis = f["chis"][start:end]
         store_keys = f["key_int"][start:end]
         store_rts = f["rt"][start:end]
         res_type_name = f["chis"].attrs["residue_name"]
         num_chis = f["chis"].attrs["num_chis"]
-        store_alignment_atoms = f["alignment_atoms"]
+        store_alignment_atoms = f["alignment_atoms"][start:end]
+        ideal_chis = f["ideal_chis"][:]
 
     packed_store_chis = bit_pack_rotamers(store_chis, num_chis)
-    packed_store_chis_unique = np.fromiter(set(packed_store_chis))
+    packed_store_chis_unique = np.fromiter(set(packed_store_chis), np.uint64())
     chis_to_expand = unpack_chis(
         packed_store_chis_unique,
         num_chis=num_chis,
@@ -692,28 +699,19 @@ def main(
     new_chis = unpack_chis(
         packed_chis, num_chis=num_chis, round_fraction=np.float(0.01)
     )
-
+    # Convert rosetta residue to nerf object
+    pyrosetta.init(
+        """-out:level 100
+        -extra_res_fa /home/dzorine/projects/phos_binding/params_files/p_loop_params/PHY_4_chi.params
+        """
+    )
     res_type = residue_type_from_name3(res_type_name)
     residue = pyrosetta.rosetta.core.conformation.Residue(res_type, True)
     base_atoms = pres_bases(residue)
     rotamer_rt_array = RotamerRTArray(
         residue=residue, target_atoms=base_atoms[0], inverse=True
     )
-    dof_sets = []
-    mask_sets = []
-    targ_mask_sets = []
-    for base in base_atoms:
-        atom_chain = get_atom_chain_from_restype(residue.type(), *base)
-        xyz_coords, mask = atom_chain_to_xyzs(rotamer_rt_array, atom_chain)
-        targ_mask = [a in base for a in atom_chain]
-        dofs = iNeRF(
-            xyz_coords[:3][np.newaxis, :],
-            xyz_coords[3:][np.newaxis, :],
-            degrees=False,
-        )
-        dof_sets.append(dofs)
-        mask_sets.append(mask)
-        targ_mask_sets.append(targ_mask)
+
     dof_sets, mask_sets, targ_mask_sets = get_dof_tempates_from_rotamer_rt_array(
         rotamer_rt_array, base_atoms
     )
@@ -722,8 +720,8 @@ def main(
         new_chis, dof_sets, mask_sets, targ_mask_sets, stub_coords_array
     )
 
-    # TODO make a table ready array of alignment atoms and chis
-
+    # hash the data
+    # print(len(rts), len(dof_sets) * len(new_chis))
     binner = xb(cart_resl=angstrom_dist_res, ori_resl=angle_res)
     keys = binner.get_bin_index(np.array(rts))
     key_type = np.dtype("i8")
@@ -732,42 +730,39 @@ def main(
         keys, hashmap_path, key_type=key_type, value_type=value_type
     )
 
-    # apply mask to the diferrent thingies, gives you the actual new stuff to add
-    rts_to_save = np.concatenate(
-        (rts[new_keys_mask][np.newaxis, :], store_rts[np.newaxis, :]), axis=1
-    )
-    keys_to_save = np.concatenate(
-        (keys[new_keys_mask][np.newaxis, :], store_keys[np.newaxis, :]), axis=1
-    )
-    chis_to_save = np.concatenate(
-        (new_chis[new_keys_mask][np.newaxis, :], store_chis[np.newaxis, :]),
-        axis=1,
-    )
+    # make the array representing the chis which have been screened
+    expanded_chis = np.tile(new_chis, (len(dof_sets), 1))
 
+    rts_to_save = np.concatenate((rts[new_keys_mask], store_rts))
+    keys_to_save = np.concatenate((keys[new_keys_mask], store_keys))
+    chis_to_save = np.concatenate((expanded_chis[new_keys_mask], store_chis))
     new_align_atoms = np.repeat(np.array(base_atoms), len(new_chis), axis=0)
-
     align_atoms_to_save = np.concatenate(
-        (
-            new_align_atoms[new_keys_mask][np.newaxis, :],
-            store_alignment_atoms[np.newaxis, :],
-        ),
-        axis=1,
+        (new_align_atoms[new_keys_mask], store_alignment_atoms)
     )
-
     index_vals_to_save = np.arange(0, len(chis_to_save))
-    # Make the base dictionary
-    new_hashmap = gp.Dict(key_type, value_type)
-    new_hashmap[keys_to_save] = index_vals_to_save
 
     output_hf5_path = "data_store.hf5"
-    with h5py.File(output_hf5_path, "r") as f:
+    with h5py.File(output_hf5_path, "w") as f:
+        print("opened")
         f.create_dataset("index", data=index_vals_to_save)
         f.create_dataset("chis", data=chis_to_save)
         f.create_dataset("key_int", data=keys_to_save)
         f.create_dataset("rt", data=rts_to_save)
         f.create_dataset("alignment_atoms", data=align_atoms_to_save)
+        f.create_dataset("ideal_chis", data=ideal_chis)
         f["chis"].attrs["residue_name"] = res_type_name
         f["chis"].attrs["num_chis"] = num_chis
+
+    # Make the base dictionary
+    new_hashmap = gp.Dict(key_type, value_type)
+    new_hashmap[keys_to_save] = index_vals_to_save
+    save_dict_as_bin(
+        "/home/dzorine/temp/table_expansion/",
+        new_hashmap,
+        "updated_expanded_1",
+        overwrite=erase,
+    )
 
 
 if __name__ == "__main__":

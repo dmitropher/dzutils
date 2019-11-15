@@ -98,6 +98,7 @@ def write_hdf5_rotamer_hash_data(
 ):
     """
     """
+    chi_array = np.array(chis_index)
     binner = xb(cart_resl=cart_resl, ori_resl=ori_resl)
     keys = binner.get_bin_index(np.array(rts))
     with h5py.File(path, "w") as f:
@@ -107,16 +108,16 @@ def write_hdf5_rotamer_hash_data(
                 [*range(1, len(keys) + 1)],
                 keys,
                 rts,
-                chis_index,
+                chi_array,
                 alignment_atoms,
             ),
         ):
             np_data = np.array(data)
             f.create_dataset(label, np_data.shape, data=np_data)
         if ideal:
-            np_data = np.array(chis_index)
-            f.create_dataset("ideal_chis", np_data.shape, data=np_data)
-        f[chi_label].attrs["num_chis"] = chis_index.shape[1]
+            # np_data = np.array(chis_index)
+            f.create_dataset("ideal_chis", chi_array.shape, data=chi_array)
+        f[chi_label].attrs["num_chis"] = chi_array.shape[1]
         f[chi_label].attrs["residue_name"] = restype.name()
 
 
