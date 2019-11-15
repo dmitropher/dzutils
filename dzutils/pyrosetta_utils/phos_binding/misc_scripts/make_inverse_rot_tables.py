@@ -119,6 +119,8 @@ def write_hdf5_rotamer_hash_data(
             f.create_dataset("ideal_chis", chi_array.shape, data=chi_array)
         f[chi_label].attrs["num_chis"] = chi_array.shape[1]
         f[chi_label].attrs["residue_name"] = restype.name()
+        f[key_label].attrs["cart_resl"] = cart_resl
+        f[key_label].attrs["ori_resl"] = ori_resl
 
 
 def write_hdf5_rosetta_rotamer_hash_data(
