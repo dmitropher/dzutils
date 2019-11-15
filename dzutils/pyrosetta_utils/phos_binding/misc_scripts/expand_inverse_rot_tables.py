@@ -19,7 +19,9 @@ from homog import hstub
 # dzutils
 from dzutils.pyrosetta_utils import residue_type_from_name3
 from dzutils.pyrosetta_utils.phos_binding import pres_bases
-from dzutils.pyrosetta_utils.phos_binding.misc_scripts import save_dict_as_bin
+from dzutils.pyrosetta_utils.phos_binding.misc_scripts.make_inverse_rot_tables import (
+    save_dict_as_bin,
+)
 from dzutils.pyrosetta_utils.geometry.pose_xforms import RotamerRTArray
 
 
@@ -344,9 +346,9 @@ def get_new_key_mask_from_hashmap(
 @click.argument("hdf5_store", type=click.Path(exists=True))
 @click.option("-a", "--angle-res", default=15.0)
 @click.option("-d", "--angstrom-dist-res", default=1.0)
-@click.option("-r", "--run-name", default="inverse_ptr_exchi7_rotamers")
+@click.option("-r", "--run-name", default="expand_rotamer_set")
 @click.option("-e", "--erase/--no-erase", default=False)
-@click.option("-o", "--output-name", default="")
+@click.option("-o", "--output-dir", default=".")
 @click.option(
     "-n",
     "--index-range",
@@ -365,7 +367,7 @@ def main(
     index_range="all",
     granularity_factor=15,
     search_radius=5,
-    output_name="",
+    output_dir="",
 ):
 
     # defint working dirs here:
@@ -443,7 +445,7 @@ def main(
     )
     index_vals_to_save = np.arange(0, len(chis_to_save))
 
-    output_hf5_path = "data_store.hf5"
+    output_hf5_path = f"{output_dir}/{run_name}.hf5"
     with h5py.File(output_hf5_path, "w") as f:
         print("opened")
         f.create_dataset("index", data=index_vals_to_save)
@@ -458,12 +460,8 @@ def main(
     # Make the base dictionary
     new_hashmap = gp.Dict(key_type, value_type)
     new_hashmap[keys_to_save] = index_vals_to_save
-    save_dict_as_bin(
-        "/home/dzorine/temp/table_expansion/",
-        new_hashmap,
-        "updated_expanded_1",
-        overwrite=erase,
-    )
+
+    save_dict_as_bin(output_dir, new_hashmap, run_name, overwrite=erase)
 
 
 if __name__ == "__main__":
