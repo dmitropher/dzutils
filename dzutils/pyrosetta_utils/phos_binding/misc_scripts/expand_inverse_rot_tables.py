@@ -1,16 +1,12 @@
-from os.path import isfile
-from itertools import product, compress
 import logging
 
 # external
 import click
 import numpy as np
 import h5py
-import pandas as pd
 
 # rosetta
 import pyrosetta
-import pyrosetta.rosetta as pyr
 
 # AP Moyer
 import getpy as gp
@@ -23,15 +19,12 @@ from homog import hstub
 # dzutils
 from dzutils.pyrosetta_utils import residue_type_from_name3
 from dzutils.pyrosetta_utils.phos_binding import pres_bases
+from dzutils.pyrosetta_utils.phos_binding.misc_scripts import save_dict_as_bin
 from dzutils.pyrosetta_utils.geometry.pose_xforms import RotamerRTArray
 
 
 logger = logging.getLogger("make_inverse_rot_tables")
 logger.setLevel(logging.DEBUG)
-
-
-def it_cartesian(input_arrays):
-    return product(*input_arrays)
 
 
 # @jit(nopython=True)
@@ -98,131 +91,6 @@ def numba_cartesian(input_arrays, out=None):
         for j in range(1, arrays[0].size):
             out[j * m : (j + 1) * m, 1:] = out[0:m, 1:]
     return out
-
-
-def rt_from_chis(rotamer_rt_array, *chis, base_atoms=(), target_atoms=()):
-    rotamer_rt_array.reset_rotamer(
-        *chis, base_atoms=base_atoms, target_atoms=target_atoms
-    )
-    # logger.debug(chis)
-    return np.array(rotamer_rt_array)
-
-
-def merge_data_to_table(old_table, name, **new_data):
-    """
-    concats two tables and fixes the index/name
-    """
-    new_table = pd.DataFrame(new_data)
-    new_table_merged = pd.concat((old_table, new_table), sort=False)
-    new_table_merged = new_table_merged.reset_index(drop=True)
-    new_table_merged["index"] = new_table_merged.index
-    new_table_merged.name = old_table.name
-    return new_table_merged
-
-
-def update_hashmap_from_df(hashmap, df, key_label, value_label):
-    """
-    Puts the values at value_label into the keys at key_label from the df
-    """
-    np_new_keys = np.array(df[key_label], dtype=np.int64)
-    np_new_vals = np.array(df[value_label], dtype=np.int64)
-    hashmap[np_new_keys] = np_new_vals
-
-
-def mask_lists(mask, *lists):
-    new_list_tuples = zip(*compress(zip(*lists), mask))
-    return [list(tuple) for tuple in new_list_tuples]
-
-
-def pose_from_res(res):
-    pose = pyrosetta.rosetta.core.pose.Pose()
-    pose.append_residue_by_bond(res)
-    return pose
-
-
-def save_table_as_json(out_dir, table, overwrite=False):
-    """
-    wraps DataFrame.to_json
-    """
-
-    data_out_path = f"{out_dir}/{table.name}.json"
-    if not overwrite:
-        if isfile(data_out_path):
-            raise RuntimeError(
-                f"Overwrite set to {overwrite} and file '{data_out_path}' exists"
-            )
-    table.to_json(data_out_path)
-
-
-def save_dict_as_bin(dict_out_dir, gp_dict, dict_name, overwrite=False):
-    """
-    wraps gp_dict.dump
-    """
-    dict_out_path = f"{dict_out_dir}/{dict_name}.bin"
-    if not overwrite:
-        if isfile(dict_out_path):
-            raise RuntimeError(
-                f"Overwrite set to {overwrite} and file '{dict_out_path}' exists"
-            )
-    gp_dict.dump(dict_out_path)
-
-
-# def rt_from_chis(*chis, res_type=None, alignment_atoms=()):
-#     """
-#     rt from the chis given
-#     """
-#     residue_pose = get_rotamer_pose_from_residue_type(res_type)
-#     return generate_pose_rt_between_res(residue_pose, 1, 1, alignment_atoms)
-
-
-def dump_residue_as_pdb(residue, path):
-    """
-    Creates a pose with just the res given and dumps pdb at path
-
-    raises an exception if dump_pdb is false
-    """
-    pose = pyr.core.pose.Pose()
-    pose.append_residue_by_bond(residue)
-    assert pose.dump_pdb(path), "dumping pdb failed!"
-    return path
-
-
-def generate_rosetta_rotamer_chis(res_type):
-    rots = [
-        rot
-        for rot in pyr.core.pack.rotamer_set.bb_independent_rotamers(res_type)
-    ]
-    return [
-        tuple(rot.chi(chi) for chi in range(1, rot.nchi() + 1)) for rot in rots
-    ]
-
-
-def update_df_and_gp_dict(
-    df, hashmap, cycle, new_chis, new_keys, new_atoms, new_rts
-):
-    """
-    Updates df and hashmap, returns ref to both
-    """
-    mask = hashmap.contains(np.array(new_keys)) == False
-    logger.debug("mask generated for batch")
-    logger.debug(str(mask))
-    logger.debug(f"all: {all(mask)} any: {any(mask)}")
-    if any(mask):
-        new_chis_masked, new_keys_masked, new_atoms_masked, new_rts_masked = mask_lists(
-            mask, new_chis, new_keys, new_atoms, new_rts
-        )
-        new_data = {
-            "key_int": new_keys_masked,
-            "chis": new_chis_masked,
-            "alignment_atoms": new_atoms_masked,
-            "rt": new_rts_masked,
-            "cycle": [cycle] * len(new_chis_masked),
-        }
-
-        new_df = merge_data_to_table(df, df.name, **new_data)
-        update_hashmap_from_df(hashmap, new_df, "key_int", "index")
-        return new_df, hashmap
-    return df, hashmap
 
 
 # @jit(nopython=True,cache=True)
@@ -327,132 +195,6 @@ def expand_rotamer_set(
     return rotamer_set
 
 
-def rosetta_rot_data(restype):
-
-    chis = generate_rosetta_rotamer_chis(restype)
-
-    logger.debug(f"working on rotamer count: {len(chis)}")
-
-    residue = pyrosetta.rosetta.core.conformation.Residue(restype, True)
-    possible_rt_bases = pres_bases(residue)
-
-    rotamer_rt = RotamerRTArray(
-        residue=residue, target_atoms=possible_rt_bases[0], inverse=True
-    )
-
-    rts, chis_index, alignment_atoms = zip(
-        *[
-            (
-                rt_from_chis(rotamer_rt, *chi_set, target_atoms=atoms),
-                chi_set,
-                np.array(atoms),
-            )
-            for chi_set in chis
-            for atoms in possible_rt_bases
-        ]
-    )
-
-    return rts, chis_index, alignment_atoms
-
-
-def write_hdf5_rotamer_hash_data(
-    path,
-    restype,
-    rts,
-    chis_index,
-    alignment_atoms,
-    cart_resl=1,
-    ori_resl=15,
-    key_label="key_int",
-    chi_label="chis",
-    align_atom_label="alignment_atoms",
-    rt_label="rt",
-    ideal=False,
-):
-    """
-    """
-    binner = xb(cart_resl=cart_resl, ori_resl=ori_resl)
-    keys = binner.get_bin_index(np.array(rts))
-    with h5py.File(path, "w") as f:
-        for label, data in zip(
-            ("index", key_label, rt_label, chi_label, align_atom_label),
-            (
-                [*range(1, len(keys) + 1)],
-                keys,
-                rts,
-                chis_index,
-                alignment_atoms,
-            ),
-        ):
-            np_data = np.array(data)
-            f.create_dataset(label, np_data.shape, data=np_data)
-        if ideal:
-            np_data = np.array(chis_index)
-            f.create_dataset("ideal_chis", np_data.shape, data=np_data)
-
-
-def write_hdf5_rosetta_rotamer_hash_data(
-    path,
-    restype,
-    cart_resl=1,
-    ori_resl=15,
-    key_label="key_int",
-    chi_label="chis",
-    align_atom_label="alignment_atoms",
-    rt_label="rt",
-    ideal=False,
-):
-    """
-    This is the utility that generates backbone dep rotamers and hashes them
-
-    Bin dimensions and hdf5 labels are configurable, but rotamer generation is
-    just whatever ex level rosetta has been set to before calling this
-    """
-    rts, chis_index, alignment_atoms = rosetta_rot_data(restype)
-    write_hdf5_rotamer_hash_data(
-        path,
-        restype,
-        rts,
-        chis_index,
-        alignment_atoms,
-        cart_resl=cart_resl,
-        ori_resl=ori_resl,
-        key_label=key_label,
-        chi_label=chi_label,
-        align_atom_label=align_atom_label,
-        rt_label=rt_label,
-        ideal=ideal,
-    )
-
-
-def build_inv_rot_table_from_rosetta_rots(
-    restype,
-    cart_resl=1,
-    ori_resl=15,
-    key_label="key_int",
-    chi_label="chis",
-    align_atom_label="alignment_atoms",
-    rt_label="rt",
-):
-    """
-    """
-    rts, chis_index, alignment_atoms = rosetta_rot_data(restype)
-    binner = xb(cart_resl=cart_resl, ori_resl=ori_resl)
-    keys = binner.get_bin_index(np.array(rts))
-
-    # make the table to assign rotamers to
-    inv_rot_table = pd.DataFrame(
-        {
-            key_label: keys,
-            chi_label: chis_index,
-            align_atom_label: alignment_atoms,
-            rt_label: rts,
-        }
-    )
-
-    return inv_rot_table
-
-
 def get_atom_chain_from_restype(res_type, *extra_atoms):
     """
     """
@@ -517,47 +259,6 @@ def atom_chain_to_xyzs(rotamer_rt_array, atom_chain, *extra):
         for i in range(len(atom_chain) - 3)
     ]
     return xyzs, mask
-
-
-def compute_dofs(rotamer_rt_array, atom_chain, degrees=True):
-    """
-    defaults to degrees, uses iNeRF
-    """
-    xyzs, mask = atom_chain_to_xyzs(rotamer_rt_array, atom_chain)
-    dof_array = iNeRF(
-        xyzs[:3][np.newaxis, :], xyzs[3:][np.newaxis, :], degrees=degrees
-    )
-
-    return dof_array, mask
-
-
-def rotamer_rt_array_to_nerf_dofs_template(rotamer_rt_array, target_atom_list):
-    """
-    Takes a residue type and builds dofs for the atoms in the chain based on the atoms in the chis
-
-    returns the dofs for each atom in the chain that leads from the first chi to the last one
-
-    Cannot detect branching
-
-    reduces the residue to the simplest dofs which include the given atoms
-    Also returns a mask of which chis are actually configurable (vs dummy chis
-    to keep the atom chain connected)
-    """
-    # chi_atoms_vector = rotamer_rt_array.residue.type().chi_atoms()
-    # ("N", "CA", "CA")  # FIXME
-    nerf_dofs = []
-    chi_masks = []
-    for target_atoms in target_atom_list:
-        atom_chain = get_atom_chain_from_restype(
-            rotamer_rt_array.residue.type(), *target_atoms
-        )
-        stub_mask = [a in target_atoms for a in atom_chain]
-        dofs, mask = compute_dofs(rotamer_rt_array, atom_chain)
-
-        nerf_dofs.append(dofs)
-        chi_masks.append(mask)
-
-    return nerf_dofs, chi_masks, stub_mask
 
 
 def chis_array_to_rt_array(
