@@ -61,7 +61,12 @@ def get_rotamer_residue_from_name(resname):
 
 base_atom_dict = {
     "PTR": pres_bases(get_rotamer_residue_from_name("PTR")),
-    "PHY": pres_bases(get_rotamer_residue_from_name("PHY")),
+    "PHY": [
+        [
+            get_rotamer_residue_from_name("PHY").atom_index(name)
+            for name in ["P", "P", "OH", "O2P"]
+        ]
+    ],
 }
 
 
@@ -299,6 +304,7 @@ def chi_list_to_query(chi_data_list):
             residue = get_rotamer_residue_from_name(resname)
             rotamer_rt_map[resname] = RotamerRTArray(
                 residue=residue,
+                base_atoms=[2, 1, 2, 3],
                 target_atoms=get_base_atoms_from_name(resname)[0],
                 inverse=True,
             )
@@ -369,13 +375,12 @@ def test_hash_table(
     if len(rotamer_rt_map.keys()) != 1:
         raise NotImplementedError("It happened again")
 
+    # print(f"chis ideal list: {chis_ideal_list}")
+    # print(f"ideal_chis_for_kd : {ideal_chis_for_kd}")
     restype = rotamer_rt_map["PHY"].residue.type()
     hits_chis = np.array(query_chis)[hits_mask]
     hits_rmsd_list = process_hits_by_rmsd(
-        restype,
-        list(chis_ideal_list),
-        list(hits_chis),
-        super=super_hits_before_rmsd,
+        restype, chis_ideal_list, list(hits_chis), super=super_hits_before_rmsd
     )
     miss_chis = np.array(query_chis)[miss_mask]
     kd_tree_chis = np.unique(np.array(ideal_chis_for_kd), axis=0)
