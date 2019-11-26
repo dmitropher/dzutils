@@ -86,9 +86,11 @@ def stub_to_homog(stub):
 def homog_from_residue(
     residue, center_atom="CA", atom1="N", atom2="CA", atom3="C"
 ):
-    return stub_to_homog(
-        _stub_from_residue(residue, center_atom, atom1, atom2, atom3)
+    rstub = Stub()
+    rstub.from_four_points(
+        *[residue.xyz(atom) for atom in (center_atom, atom1, atom2, atom3)]
     )
+    return stub_to_homog(rstub)
 
 
 def rt_to_homog(rt):

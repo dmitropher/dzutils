@@ -25,6 +25,7 @@ def scrape_rotamers_by_name3(pose, name):
     """
     returns a list of tuples: (resname, chi_1,chi_2,...,chi_n)
     """
+
     pairs = residues_by_name(pose, name, include_res=True)
     if not pairs:
         return []
