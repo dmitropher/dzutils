@@ -85,6 +85,47 @@ def rosetta_rot_data(restype, possible_rt_bases):
     return rts, chis_index, alignment_atoms
 
 
+def write_hdf5_data(path, **kargs):
+    """
+    Takes a dict of hierarchical data and groups
+
+    dataset and group cannot share names (hdf5 stuff)
+
+    format: {name:(group_name,data,{attr_name:attr_value})}
+    if you wish to use the root group, "/" or "" are adequate
+
+    for no atributes use the empty dict
+
+    """
+    with h5py.File(path, "w") as f:
+        for k, (group_str, data, attrs) in kargs.items():
+            if group_str and group_str not in f.keys():
+                group = f.create_group(group_str)
+                group.create_dataset(
+                    k,
+                    data=data,
+                    dtype=data.dtype,
+                    maxshape=(None, *data.shape[1:]),
+                    chunks=True,
+                )
+                if attrs:
+                    for key, val in attrs.items():
+                        group[k].attrs[key] = val
+
+            else:
+
+                f.create_dataset(
+                    k,
+                    data=data,
+                    dtype=data.dtype,
+                    maxshape=(None, *data.shape[1:]),
+                    chunks=True,
+                )
+                if attrs:
+                    for key, val in attrs.items():
+                        f[k].attrs[key] = val
+
+
 def write_hdf5_rotamer_hash_data(
     path,
     restype,
@@ -95,7 +136,8 @@ def write_hdf5_rotamer_hash_data(
     ori_resl=15,
     key_label="key_int",
     chi_label="chis",
-    align_atom_label="alignment_atoms",
+    base_atom_label="base_atoms",
+    align_atom_label="target_atoms",
     rt_label="rt",
     ideal=False,
     res_name="",
@@ -107,7 +149,14 @@ def write_hdf5_rotamer_hash_data(
     keys = binner.get_bin_index(np.array(rts))
     with h5py.File(path, "w") as f:
         for label, data in zip(
-            ("index", key_label, rt_label, chi_label, align_atom_label),
+            (
+                "index",
+                key_label,
+                rt_label,
+                chi_label,
+                base_atom_label,
+                align_atom_label,
+            ),
             (
                 [*range(1, len(keys) + 1)],
                 keys,
@@ -382,7 +431,7 @@ def atom_chain_to_xyzs(rotamer_rt_array, atom_chain, *extra):
     """
     chi_atoms = rotamer_rt_array.residue.type().chi_atoms()
     reduced_extra = [a for a in extra if not a in atom_chain]
-    # print(reduced_extra)
+
     atom_chain.extend(reduced_extra)
     xyzs = rotamer_rt_array.get_xyz(atom_chain)
     mask = [
@@ -395,7 +444,48 @@ def atom_chain_to_xyzs(rotamer_rt_array, atom_chain, *extra):
     return xyzs, mask
 
 
-def get_dof_tempates_from_rotamer_rt_array(
+def rotamer_rt_array_to_dof_template(rotamer_rt_array):
+    """
+    """
+    target_atoms = list(rotamer_rt_array._target_atoms)
+    # print(target_atoms)
+    atom_chain = get_atom_chain_from_restype(
+        rotamer_rt_array.residue.type(), *target_atoms
+    )
+    # print(atom_chain)
+    xyz_coords, mask = atom_chain_to_xyzs(
+        rotamer_rt_array, atom_chain, *target_atoms
+    )
+    dofs = iNeRF(
+        xyz_coords[:3][np.newaxis, :],
+        xyz_coords[3:][np.newaxis, :],
+        degrees=True,
+    )
+    return dofs, mask, xyz_coords[:3]
+
+
+def rotamer_rt_array_to_target_mask(rotamer_rt_array, center_index=0):
+    """
+    Target atoms should be length 3 or 4
+    """
+    atom_chain = get_atom_chain_from_restype(
+        rotamer_rt_array.residue.type(), *rotamer_rt_array._target_atoms
+    )
+    xyz_coords, mask = atom_chain_to_xyzs(
+        rotamer_rt_array, atom_chain, *rotamer_rt_array._target_atoms
+    )
+
+    targ_set = rotamer_rt_array._target_atoms[1:]
+    targ_mask = [
+        targ_set.index(a) + 1 if a in rotamer_rt_array._target_atoms else False
+        for a in atom_chain
+    ]
+    center_atom = rotamer_rt_array._target_atoms[center_index]
+    center_mask = [a == center_atom for a in atom_chain][3:]
+    return targ_mask, center_mask
+
+
+def get_dof_templates_from_rotamer_rt_array(
     rotamer_rt_array, target_atoms=[], center_indices=[]
 ):
     """
@@ -415,7 +505,7 @@ def get_dof_tempates_from_rotamer_rt_array(
             rotamer_rt_array, atom_chain, *atom_set
         )
 
-        targ_set = atom_set[1:] if len(atom_set > 3) else atom_set
+        targ_set = atom_set[1:] if len(atom_set) > 3 else atom_set
         targ_mask = [
             targ_set.index(a) + 1 if a in atom_set else False
             for a in atom_chain
