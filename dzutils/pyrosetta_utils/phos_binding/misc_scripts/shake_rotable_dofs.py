@@ -1,4 +1,34 @@
 import h5py
+import click
+import numpy as np
+
+# Will Sheffler
+from homog import hstub
+from xbin import XformBinner as xb
+
+# AP Moyer
+from nerf import NeRF, perturb_dofs
+import getpy as gp
+
+# rosetta
+import pyrosetta
+
+# dzutils
+from dzutils.pyrosetta_utils import residue_type_from_name3
+from dzutils.pyrosetta_utils.geometry.pose_xforms import RotamerRTArray
+from dzutils.pyrosetta_utils.phos_binding.misc_scripts.rotable import (
+    chis_array_to_rt_array,
+    consolidate_chis,
+    expand_rotamer_set,
+    fill_dof_template,
+    get_dof_templates_from_rotamer_rt_array,
+    get_new_key_mask_from_hashmap,
+    rotamer_rt_array_to_dof_template,
+    rotamer_rt_array_to_target_mask,
+    save_dict_as_bin,
+    unpack_chis,
+    xyzs_to_stub_array,
+)
 
 
 @click.command()
@@ -58,91 +88,68 @@ def main(
             num_chis = f["chis"].attrs["num_chis"]
             store_target_atoms = f["chis"].attrs["target_atoms"]
             store_base_atoms = f["chis"].attrs["base_atoms"]
+            store_chis = f["chis"][start:end]
 
-            # Now we can start working on shaking on dofs
+        res_type = residue_type_from_name3(res_type_name)
+        residue = pyrosetta.rosetta.core.conformation.Residue(res_type, True)
+        target_atoms = [
+            residue.atom_index(name) for name in ["P", "P", "OH", "O2P"]
+        ]  # list(list(res_type.chi_atoms())[-1])  # pres_bases(residue)
+        rotamer_rt_array = RotamerRTArray(
+            residue=residue,
+            base_atoms=[2, 1, 2, 3],
+            target_atoms=target_atoms,
+            inverse=True,
+        )
 
-    # Convert rosetta residue to nerf object
-    pyrosetta.init(
-        """-out:level 100
-        -extra_res_fa /home/dzorine/projects/phos_binding/params_files/p_loop_params/PHY_4_chi.params
-        """
-    )
-    res_type = residue_type_from_name3(res_type_name)
-    residue = pyrosetta.rosetta.core.conformation.Residue(res_type, True)
-    target_atoms = [
-        residue.atom_index(name) for name in ["P", "P", "OH", "O2P"]
-    ]  # list(list(res_type.chi_atoms())[-1])  # pres_bases(residue)
-    rotamer_rt_array = RotamerRTArray(
-        residue=residue,
-        base_atoms=[2, 1, 2, 3],
-        target_atoms=target_atoms,
-        inverse=True,
-    )
+        dof_template, mask, abcs = rotamer_rt_array_to_dof_template(
+            rotamer_rt_array
+        )
+        targ_mask, center_mask = rotamer_rt_array_to_target_mask(
+            rotamer_rt_array
+        )
+        target_mask_array = np.array(targ_mask)
+        center_mask_array = np.array(center_mask)
+        stub_coords = rotamer_rt_array.get_base_xyz()
+        dofs = fill_dof_template(dof_template, store_chis, mask)
+        base_xform = hstub(
+            stub_coords[0, :],
+            stub_coords[1, :],
+            stub_coords[2, :],
+            cen=list(stub_coords[1, :]),
+        )
+        base_xforms = np.tile(base_xform, (len(dofs), 1, 1))
 
-    dof_sets, mask_sets, targ_mask_sets, center_mask_sets, nerf_xyzs = get_dof_tempates_from_rotamer_rt_array(
-        rotamer_rt_array, [target_atoms]
-    )
-    stub_coords_array = np.array([rotamer_rt_array.get_base_xyz()])
-    rts = chis_array_to_rt_array(
-        new_chis,
-        dof_sets,
-        mask_sets,
-        nerf_xyzs,
-        targ_mask_sets,
-        center_mask_sets,
-        stub_coords_array,
-    )
+        key_type = np.dtype("i8")
+        value_type = np.dtype("i8")
+        hashmap = gp.Dict(key_type, value_type)
+        hashmap.load(hashmap_path)
 
-    # hash the data
-
-    binner = xb(cart_resl=angstrom_dist_res, ori_resl=angle_res)
-    keys = binner.get_bin_index(np.array(rts))
-    key_type = np.dtype("i8")
-    value_type = np.dtype("i8")
-
-    new_keys_mask = get_new_key_mask_from_hashmap(
-        keys, hashmap_path, key_type=key_type, value_type=value_type
-    )
-    keys_to_save = np.concatenate((keys[new_keys_mask], store_keys))
-    index_vals_to_save = np.arange(0, len(keys_to_save))
-
-    new_hashmap = gp.Dict(key_type, value_type)
-    new_hashmap[keys_to_save] = index_vals_to_save
-
-    # make the array representing the chis which have been screened
-    expanded_chis = np.tile(new_chis, (len(dof_sets), 1))
-
-    rts_to_save = np.concatenate((rts[new_keys_mask], store_rts))
-    chis_to_save = np.concatenate((expanded_chis[new_keys_mask], store_chis))
-    new_align_atoms = np.repeat(
-        np.array([target_atoms]), len(new_chis), axis=0
-    )
-    align_atoms_to_save = np.concatenate(
-        (new_align_atoms[new_keys_mask], store_alignment_atoms)
-    )
-
-    stubby = rotamer_rt_array.get_base_xyz()
-    base_xform = hstub(
-        stubby[0, :], stubby[1, :], stubby[2, :], cen=list(stubby[1, :])
-    )
-    for template, mask, target_stub_mask, center_mask, nerf_stub in zip(
-        dof_sets, mask_sets, targ_mask_sets, center_mask_sets, nerf_xyzs
-    ):
-
-        # filled_dofs = fill_dof_template(template,new_chis,mask)
-        for i in range(100):
-            # perturb and deposit, break if you reach 90% density
-            dof_copy = np.array(template)
-            perturb_dofs(dof_copy, bond_length_range=0.1)
-            perturbed_rts = template_to_rt(
-                new_chis,
-                dof_copy,
-                mask,
-                nerf_stub,
-                target_stub_mask,
-                center_mask,
-                base_xform,
+        binner = xb(cart_resl=angstrom_dist_res, ori_resl=angle_res)
+        # Now we can start working on shaking on dofs
+        big_num = 100
+        threshold = 0.1
+        for i in range(big_num):
+            new_dofs = np.array(dofs)
+            perturb_dofs(new_dofs)
+            new_xyzs = NeRF(abcs, new_dofs)
+            target_stub_array = xyzs_to_stub_array(
+                new_xyzs, target_mask_array, center_mask_array
             )
-            perturbed_keys = binner.get_bin_index(perturbed_rts)
-            perturbed_keys_mask = new_hashmap.contains(perturbed_keys) == False
-            new_keys
+            new_rts = np.linalg.inv(target_stub_array) @ base_xforms
+            new_rt_keys = binner.get_bin_index(new_rts)
+            new_keys_mask = hashmap.contains(new_rt_keys) == False
+            new_keys = new_rt_keys[new_keys_mask]
+
+            # update hashmap, store chis/keys/rts
+            # if new keys is less than threshold, break
+            hashmap[new_keys] = np.arange(
+                out["chis"].shape[0], out["chis"].shape[0] + len(new_keys)
+            )
+            old_end_index = out["chis"].shape[0]
+            out["chis"][old_end_index:] = store_chis[new_keys_mask]
+            out["key_int"][old_end_index:] = new_keys
+            out["rt"][old_end_index:] = new_rts[new_keys_mask]
+
+            if len(new_keys) / len(new_rt_keys) < threshold:
+                break

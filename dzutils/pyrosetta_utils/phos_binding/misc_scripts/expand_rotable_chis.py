@@ -11,10 +11,11 @@ import pyrosetta
 # AP Moyer
 import getpy as gp
 
-# from nerf import iNeRF, NeRF,perturb_dofs
+from nerf import iNeRF, NeRF, perturb_dofs
 
 # Will Sheffler
 from xbin import XformBinner as xb
+from homog import hstub
 
 # dzutils
 from dzutils.pyrosetta_utils import residue_type_from_name3
@@ -23,9 +24,13 @@ from dzutils.pyrosetta_utils.phos_binding.misc_scripts.rotable import (
     consolidate_chis,
     expand_rotamer_set,
     unpack_chis,
-    get_dof_tempates_from_rotamer_rt_array,
+    get_dof_templates_from_rotamer_rt_array,
     chis_array_to_rt_array,
     get_new_key_mask_from_hashmap,
+    rotamer_rt_array_to_dof_template,
+    rotamer_rt_array_to_target_mask,
+    fill_dof_template,
+    xyzs_to_stub_array,
 )
 from dzutils.pyrosetta_utils.geometry.pose_xforms import RotamerRTArray
 
@@ -74,7 +79,8 @@ def main(
         store_rts = f["rt"][start:end]
         res_type_name = f["chis"].attrs["residue_name"]
         num_chis = f["chis"].attrs["num_chis"]
-        store_alignment_atoms = f["alignment_atoms"][start:end]
+        store_alignment_atoms = f["chis"].attrs["target_atoms"]
+        store_base_atoms = f["chis"].attrs["base_atoms"]
         ideal_chis = f["ideal_chis"][:]
 
     chis_to_expand = consolidate_chis(
@@ -87,7 +93,6 @@ def main(
         round_fraction=np.float(0.01),
     )
     packed_chis = np.fromiter(new_chis_set, np.uint64())
-
     new_chis = unpack_chis(
         packed_chis, num_chis=num_chis, round_fraction=np.float(0.01)
     )
@@ -100,31 +105,42 @@ def main(
     )
     res_type = residue_type_from_name3(res_type_name)
     residue = pyrosetta.rosetta.core.conformation.Residue(res_type, True)
-    target_atoms = [
-        residue.atom_index(name) for name in ["P", "P", "OH", "O2P"]
-    ]  # list(list(res_type.chi_atoms())[-1])  # pres_bases(residue)
+    target_atoms = store_alignment_atoms
     rotamer_rt_array = RotamerRTArray(
         residue=residue,
-        base_atoms=[2, 1, 2, 3],
-        target_atoms=target_atoms,
+        base_atoms=list(store_base_atoms),
+        target_atoms=list(target_atoms),
         inverse=True,
     )
 
-    dof_sets, mask_sets, targ_mask_sets, center_mask_sets, nerf_xyzs = get_dof_tempates_from_rotamer_rt_array(
-        rotamer_rt_array, [target_atoms]
-    )
-    stub_coords_array = np.array([rotamer_rt_array.get_base_xyz()])
-    rts = chis_array_to_rt_array(
-        new_chis,
-        dof_sets,
-        mask_sets,
-        nerf_xyzs,
-        targ_mask_sets,
-        center_mask_sets,
-        stub_coords_array,
+    dof_template, mask, abc = rotamer_rt_array_to_dof_template(
+        rotamer_rt_array
     )
 
+    targ_mask, center_mask = rotamer_rt_array_to_target_mask(rotamer_rt_array)
+    target_mask_array = np.array(targ_mask)
+    center_mask_array = np.array(center_mask)
+    stub_coords = rotamer_rt_array.get_base_xyz()
+
+    dofs = fill_dof_template(dof_template, new_chis, mask)
+    base_xform = hstub(
+        stub_coords[0, :],
+        stub_coords[1, :],
+        stub_coords[2, :],
+        cen=list(stub_coords[1, :]),
+    )
+    base_xforms = np.tile(base_xform, (len(dofs), 1, 1))
     # hash the data
+    abcs = np.tile(abc, (len(dofs), 1, 1))
+    print(f"dofs: {dofs}")
+    print(f"abcs: {abcs}")
+    print(f"dofs shape : {dofs.shape}")
+    print(f"abcs shape : {abcs.shape}")
+    new_xyzs = NeRF(abcs, dofs)
+    target_stub_array = xyzs_to_stub_array(
+        new_xyzs, target_mask_array, center_mask_array
+    )
+    rts = np.linalg.inv(target_stub_array) @ base_xforms
 
     binner = xb(cart_resl=angstrom_dist_res, ori_resl=angle_res)
     keys = binner.get_bin_index(np.array(rts))
@@ -140,45 +156,8 @@ def main(
     new_hashmap = gp.Dict(key_type, value_type)
     new_hashmap[keys_to_save] = index_vals_to_save
 
-    # make the array representing the chis which have been screened
-    expanded_chis = np.tile(new_chis, (len(dof_sets), 1))
-
     rts_to_save = np.concatenate((rts[new_keys_mask], store_rts))
-    chis_to_save = np.concatenate((expanded_chis[new_keys_mask], store_chis))
-    new_align_atoms = np.repeat(
-        np.array([target_atoms]), len(new_chis), axis=0
-    )
-    align_atoms_to_save = np.concatenate(
-        (new_align_atoms[new_keys_mask], store_alignment_atoms)
-    )
-    #
-    #
-    # stubby = rotamer_rt_array.get_base_xyz()
-    # base_xform = hstub(
-    #     stubby[0, :],
-    #     stubby[1, :],
-    #     stubby[2, :],
-    #     cen=list(stubby[1, :]),
-    # )
-    # for template,mask, target_stub_mask,center_mask,nerf_stub in zip(dof_sets,mask_sets,targ_mask_sets,center_mask_sets,nerf_xyzs):
-    #
-    #     # filled_dofs = fill_dof_template(template,new_chis,mask)
-    #     for i in range (100):
-    #         #perturb and deposit, break if you reach 90% density
-    #         dof_copy = np.array(template)
-    #         perturb_dofs(dof_copy,bond_length_range=0.1)
-    #         perturbed_rts = template_to_rt(
-    #             new_chis,
-    #             dof_copy,
-    #             mask,
-    #             nerf_stub,
-    #             target_stub_mask,
-    #             center_mask,
-    #             base_xform
-    #         )
-    #         perturbed_keys = binner.get_bin_index(perturbed_rts)
-    #         perturbed_keys_mask = new_hashmap.contains(perturbed_keys) ==False
-    #         new_keys
+    chis_to_save = np.concatenate((new_chis[new_keys_mask], store_chis))
 
     index_vals_to_save = np.arange(0, len(chis_to_save))
     output_hf5_path = f"{output_dir}/{run_name}.hf5"
@@ -188,10 +167,12 @@ def main(
         f.create_dataset("chis", data=chis_to_save)
         f.create_dataset("key_int", data=keys_to_save)
         f.create_dataset("rt", data=rts_to_save)
-        f.create_dataset("alignment_atoms", data=align_atoms_to_save)
+        # f.create_dataset("alignment_atoms", data=align_atoms_to_save)
         f.create_dataset("ideal_chis", data=ideal_chis)
         f["chis"].attrs["residue_name"] = res_type_name
         f["chis"].attrs["num_chis"] = num_chis
+        f["chis"].attrs["target_atoms"] = store_alignment_atoms
+        f["chis"].attrs["base_atoms"] = store_base_atoms
 
     # Make the base dictionary
     new_hashmap = gp.Dict(key_type, value_type)
