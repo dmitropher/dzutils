@@ -9,10 +9,15 @@ import getpy as gp
 @click.command()
 # @click.argument("hashmap-path", type=click.Path(exists=True))
 @click.argument("hdf5-stores", nargs=-1, type=click.Path(exists=True))
-def main(hdf5_stores):
+@click.option(
+    "-f", "--hdf5-store-list", type=click.Path(exists=True), default=""
+)
+def main(hdf5_stores, hdf5_store_list=""):
     """
     Use the associated hashmap to consolidate stores 1 and 2, dump new hashmap
     """
+    if hdf5_store_list:
+        hdf5_stores = open(hdf5_store_list).read().splitlines()
     key_type = np.dtype("i8")
     value_type = np.dtype("i8")
     hashmap = gp.Dict(key_type, value_type)

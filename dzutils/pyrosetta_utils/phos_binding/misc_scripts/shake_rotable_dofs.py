@@ -45,35 +45,34 @@ from dzutils.pyrosetta_utils.phos_binding.misc_scripts.rotable import (
     default="all",
     help="dash separated indices to expand. May specify 'all'",
 )
-@click.option("-g", "--granularity-factor", default=15)
-@click.option("-s", "--search-radius", default=5)
 def main(
     hashmap_path,
     hdf5_store,
-    run_name="inverse_ptr_exchi7_rotamers",
+    run_name="inv_rot_shaken",
     angstrom_dist_res=1,
     angle_res=15,
     erase=False,
     index_range="all",
-    granularity_factor=15,
-    search_radius=5,
     output_dir="",
 ):
-
+    # need to eliminate this at some point
+    pyrosetta.init(
+        """-out:level 100
+        -extra_res_fa /home/dzorine/projects/phos_binding/params_files/p_loop_params/PHY_4_chi.params
+        """
+    )
     # defint working dirs here:
 
     start, end = [None, None]
     if index_range != "all":
         start, end = [int(val) for val in index_range.split("-")]
 
-    outname = "temp.hf5"
-    ignore_keys = ["ideal_chis"]
+    outname = f"{output_dir}/{run_name}.hf5"
+
     with h5py.File(outname, "w") as out:
         # first make an expandable copy of relevant data
         with h5py.File(hdf5_store, "r") as f:
             for key in f.keys():
-                if key in ignore_keys:
-                    continue
                 data = f[key][start:end]
                 out_set = out.create_dataset(
                     key,
@@ -85,9 +84,6 @@ def main(
                 for attr_key in f[key].attrs.keys():
                     out_set.attrs[attr_key] = f[key].attrs[attr_key]
             res_type_name = f["chis"].attrs["residue_name"]
-            num_chis = f["chis"].attrs["num_chis"]
-            store_target_atoms = f["chis"].attrs["target_atoms"]
-            store_base_atoms = f["chis"].attrs["base_atoms"]
             store_chis = f["chis"][start:end]
 
         res_type = residue_type_from_name3(res_type_name)
@@ -102,7 +98,7 @@ def main(
             inverse=True,
         )
 
-        dof_template, mask, abcs = rotamer_rt_array_to_dof_template(
+        dof_template, mask, abc = rotamer_rt_array_to_dof_template(
             rotamer_rt_array
         )
         targ_mask, center_mask = rotamer_rt_array_to_target_mask(
@@ -119,6 +115,7 @@ def main(
             cen=list(stub_coords[1, :]),
         )
         base_xforms = np.tile(base_xform, (len(dofs), 1, 1))
+        abcs = np.tile(abc, (len(dofs), 1, 1))
 
         key_type = np.dtype("i8")
         value_type = np.dtype("i8")
@@ -153,3 +150,8 @@ def main(
 
             if len(new_keys) / len(new_rt_keys) < threshold:
                 break
+        save_dict_as_bin(output_dir, hashmap, run_name, overwrite=erase)
+
+
+if __name__ == "__main__":
+    main()

@@ -16,6 +16,8 @@ from os.path import isdir
 @click.option("-s", "--search-radius", default=5)
 @click.option("-c", "--chunk-size", default=150)
 @click.option("-o", "--output-dir", default=".")
+@click.option("-n", "--output-dir-names", default=".")
+@click.option("-p", "--expand-script", default=".")
 def main(
     task_file_path,
     hashmap_path,
@@ -28,10 +30,11 @@ def main(
     search_radius=5,
     chunk_size=150,
     output_dir=".",
+    output_dir_names="",
+    expand_script="~/scripts/dzutils/dzutils/pyrosetta_utils/phos_binding/misc_scripts/expand_inverse_rot_tables.py",
 ):
     """
     """
-    expand_script = "~/scripts/dzutils/dzutils/pyrosetta_utils/phos_binding/misc_scripts/expand_inverse_rot_tables.py"
 
     if not isdir(output_dir):
         mkdir(output_dir)
@@ -40,7 +43,9 @@ def main(
 
     tasks = []
     for start in range(0, num_chi_sets, chunk_size):
-        dirname = f"{output_dir}/expand_range_{start}_{start+chunk_size-1}"
+        dirname = (
+            f"{output_dir}/{output_dir_names}_{start}_{start+chunk_size-1}"
+        )
         if not isdir(dirname):
             mkdir(dirname)
         run_cmd_string = f"""python  {
