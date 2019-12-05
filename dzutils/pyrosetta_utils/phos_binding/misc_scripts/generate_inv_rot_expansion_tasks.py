@@ -12,8 +12,6 @@ from os.path import isdir
 @click.option("-d", "--angstrom-dist-res", default=1.0)
 @click.option("-r", "--run-name", default="expand_rotamer_set")
 @click.option("-e", "--erase/--no-erase", default=False)
-@click.option("-g", "--granularity-factor", default=15)
-@click.option("-s", "--search-radius", default=5)
 @click.option("-c", "--chunk-size", default=150)
 @click.option("-o", "--output-dir", default=".")
 @click.option("-n", "--output-dir-names", default=".")
@@ -26,8 +24,6 @@ def main(
     angstrom_dist_res=1,
     angle_res=15,
     erase=False,
-    granularity_factor=15,
-    search_radius=5,
     chunk_size=150,
     output_dir=".",
     output_dir_names="",

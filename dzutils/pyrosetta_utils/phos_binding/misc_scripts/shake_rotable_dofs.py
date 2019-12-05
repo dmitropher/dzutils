@@ -124,7 +124,7 @@ def main(
 
         binner = xb(cart_resl=angstrom_dist_res, ori_resl=angle_res)
         # Now we can start working on shaking on dofs
-        big_num = 100
+        big_num = 10000
         threshold = 0.1
         for i in range(big_num):
             new_dofs = np.array(dofs)
@@ -147,8 +147,10 @@ def main(
             out["chis"][old_end_index:] = store_chis[new_keys_mask]
             out["key_int"][old_end_index:] = new_keys
             out["rt"][old_end_index:] = new_rts[new_keys_mask]
-
-            if len(new_keys) / len(new_rt_keys) < threshold:
+            portion_new = len(new_keys) / len(new_rt_keys)
+            # print(f"portion_new {portion_new} in loop {i}")
+            if portion_new < threshold:
+                print(f"threshold reached at {portion_new} in loop {i}. ")
                 break
         save_dict_as_bin(output_dir, hashmap, run_name, overwrite=erase)
 

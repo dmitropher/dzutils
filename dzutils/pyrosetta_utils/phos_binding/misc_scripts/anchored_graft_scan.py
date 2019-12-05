@@ -323,7 +323,12 @@ def graft_fragment(
                 logger.debug(f"pose graft site: {site}")
 
                 grafted = graft(
-                    pose.clone(), insert, graft_pos, phos, margin=i + 4
+                    pose.clone(),
+                    insert,
+                    graft_pos,
+                    phos,
+                    margin=i + 4,
+                    label=label,
                 )
 
                 if grafted:
@@ -411,7 +416,7 @@ def graft_generator(
                 site,
                 save_intermediate=save_intermediate,
                 get_additional_output=get_additional_output,
-                label="",
+                label=label,
             ):
 
                 yield graft
