@@ -138,9 +138,10 @@ def main(
 
     pres = residue_from_name3("PHY")
 
+    successful_grafts = []
     # build grafts
     for graft_num, graft in enumerate(grafts, 1):
-        graft.dump_pdb("this_one.pdb")
+        # graft.dump_pdb("this_one.pdb")
         # Use selectors to get the allowed residues for the scan
         label_selector = ResiduePDBInfoHasLabelSelector(label)
         labeled_resnums = [
@@ -189,20 +190,20 @@ def main(
         print(stub_xyzs)
         # Do the geometry
         base_xforms = hstub(
-            stub_xyzs[:, 0, :][:, 0, :],
-            stub_xyzs[:, 1, :][:, 0, :],
-            stub_xyzs[:, 2, :][:, 0, :],
-            cen=list(stub_xyzs[:, 1, :][:, 0, :]),
+            stub_xyzs[:, 0, :],
+            stub_xyzs[:, 1, :],
+            stub_xyzs[:, 2, :],
+            cen=list(stub_xyzs[:, 1, :]),
         )
         po4xforms = hstub(
-            po4_xyzs[:, 0, :][:, 0, :],
-            po4_xyzs[:, 1, :][:, 0, :],
-            po4_xyzs[:, 2, :][:, 0, :],
-            cen=list(po4_xyzs[:, 0, :][:, 0, :]),
+            po4_xyzs[:, 0, :],
+            po4_xyzs[:, 1, :],
+            po4_xyzs[:, 2, :],
+            cen=list(po4_xyzs[:, 0, :]),
         )
         po4_l, base_l = len(po4xforms), len(base_xforms)
         po4_repeat = np.repeat(po4xforms, base_l, axis=0)
-        base_tiled = np.tile(base_xforms, (po4_l, 3, 3))
+        base_tiled = np.tile(base_xforms, (po4_l, 1, 1))
         index_tiled = np.tile(start_resnum_array, (1,))
         rts = np.linalg.inv(po4_repeat) @ base_tiled
 
@@ -221,7 +222,7 @@ def main(
         # retrieve the hits
         store_indices = hashmap[hit_keys]
         hits_resnums = index_tiled[hits_mask]
-        with h5py.File() as store:
+        with h5py.File(hdf5_store_path, "r") as store:
             store_keys = store["key_int"][store_indices]
             store_chis = store["chis"][store_indices]
             # Maybe check rts to make sure they were binned the same way
@@ -239,9 +240,13 @@ def main(
             working.replace_residue(resnum, pres.clone(), True)
             for i in range(1, len(chi_set) + 1):
                 working.set_chi(i, resnum, chi_set[i])
-            working.dump_pdb(
-                f"graft_{graft_num}_resn_{resnum}_hit_{hit_num}.pdb"
-            )
+            success_name = f"graft_{graft_num}_resn_{resnum}_hit_{hit_num}.pdb"
+            base_scaf_name = f"ori_{graft_num}_resn_{resnum}_hit_{hit_num}.pdb"
+            working.dump_pdb(success_name)
+            graft.dump_pdb(base_scaf_name)
+            successful_grafts.append(success_name)
+    with open("successes.txt", mode="wt", encoding="utf-8") as myfile:
+        myfile.write("\n".join(successful_grafts))
 
 
 if __name__ == "__main__":
