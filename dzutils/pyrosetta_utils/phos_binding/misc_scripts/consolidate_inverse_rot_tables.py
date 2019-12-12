@@ -6,13 +6,22 @@ import h5py
 import getpy as gp
 
 
+def test_consolidation(consolidated, *stores):
+    """
+    checks if all the keys are found in consolidated
+    """
+    for store_path in stores:
+        with h5py.File(store_path, "r") as f:
+            store_keys = f["key_int"][:]
+            assert not any(consolidated.contains(store_keys) == False)
+
+
 @click.command()
 # @click.argument("hashmap-path", type=click.Path(exists=True))
 @click.argument("hdf5-stores", nargs=-1, type=click.Path(exists=True))
-@click.option(
-    "-f", "--hdf5-store-list", type=click.Path(exists=True), default=""
-)
-def main(hdf5_stores, hdf5_store_list=""):
+@click.option("-f", "--hdf5-store-list", type=click.Path(), default="")
+@click.option("-t", "--self-test/--no-test", default="False")
+def main(hdf5_stores, hdf5_store_list="", self_test=False):
     """
     Use the associated hashmap to consolidate stores 1 and 2, dump new hashmap
     """
@@ -55,6 +64,8 @@ def main(hdf5_stores, hdf5_store_list=""):
                     out[store_key][old_len:] = f[store_key][:][new_keys_mask]
                     assert len(out[store_key]) == old_len + len(new_keys)
 
+    if self_test:
+        test_consolidation(hashmap, *hdf5_stores)
     dict_out_path = f"consolidated.bin"
     hashmap.dump(dict_out_path)
 

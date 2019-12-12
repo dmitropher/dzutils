@@ -92,6 +92,7 @@ def get_bb_xyzs(pose, *resnums):
 @click.option("-r", "--rosetta-flags-file")
 @click.option("-c", "--cart-resl", default=1)
 @click.option("-o", "--ori-resl", default=15)
+@click.option("-i", "--inverse-rotamer-radius", default=8)
 @click.option("--get-additional-output/--one-output", default=True)
 @click.option("--save/--no-save", default=True)
 @click.option(
@@ -99,6 +100,7 @@ def get_bb_xyzs(pose, *resnums):
     "--struct-numbers",
     help="Only attempt grafts on the chosen secondary structures (indexed from 0). Must be given a ',' separated string, sorry, Ill try to fix this later.",
 )
+@click.option("--same-chain/--no-same-chain", default=True)
 def main(
     pose_pdb,
     fragment_store_path,
@@ -112,6 +114,8 @@ def main(
     ori_resl=15,
     get_additional_output=True,
     struct_numbers="",
+    same_chain=True,
+    inverse_rotamer_radius=12,
 ):
     """
     This program takes a pose and a fragment store and returns alignment graphs
@@ -142,33 +146,42 @@ def main(
     # build grafts
     for graft_num, graft in enumerate(grafts, 1):
         # graft.dump_pdb("this_one.pdb")
-        # Use selectors to get the allowed residues for the scan
+        # Use selectors to get the allowed residues for the scans
+        selectors = []
         label_selector = ResiduePDBInfoHasLabelSelector(label)
-        labeled_resnums = [
-            resnum
-            for resnum, has_label in enumerate(label_selector.apply(graft), 1)
-            if has_label
-        ]
-        print(labeled_resnums)
-        excluded_chains = set(
-            [str(chain_of(graft, resnum)) for resnum in labeled_resnums]
-        )
-        chains_for_selector = ",".join(excluded_chains)
-        print(f"chains_for_sele: {chains_for_selector}")
-        wrong_chain_selector = ChainSelector(chains_for_selector)
-        correct_chain_selector = NotResidueSelector(wrong_chain_selector)
-        neighbor_dist = 8.0
-        neighbors_selector = NeighborhoodResidueSelector(
-            label_selector, neighbor_dist
-        )
+        # selectors.append(label_selector)
+        not_label_selector = NotResidueSelector(label_selector)
+        selectors.append(not_label_selector)
+        if not same_chain:
+            labeled_resnums = [
+                resnum
+                for resnum, has_label in enumerate(
+                    label_selector.apply(graft), 1
+                )
+                if has_label
+            ]
+            print(labeled_resnums)
+            excluded_chains = set(
+                [str(chain_of(graft, resnum)) for resnum in labeled_resnums]
+            )
+            chains_for_selector = ",".join(excluded_chains)
+            print(f"chains_for_sele: {chains_for_selector}")
+            wrong_chain_selector = ChainSelector(chains_for_selector)
+            correct_chain_selector = NotResidueSelector(wrong_chain_selector)
+            selectors.append(correct_chain_selector)
+        # neighbor_dist = 8.0
+        if inverse_rotamer_radius:
+            neighbors_selector = NeighborhoodResidueSelector(
+                label_selector, inverse_rotamer_radius
+            )
+            selectors.append(neighbors_selector)
         ligand_property = (
             pyrosetta.rosetta.core.chemical.ResidueProperty.LIGAND
         )
         ligands_selector = ResiduePropertySelector(ligand_property)
         not_ligands = NotResidueSelector(ligands_selector)
-        rt_start_selector = and_compose_residue_selectors(
-            neighbors_selector, correct_chain_selector, not_ligands
-        )
+        selectors.append(not_ligands)
+        rt_start_selector = and_compose_residue_selectors(*selectors)
         rt_start_resnums = [
             resnum
             for resnum, is_allowed in enumerate(
@@ -204,7 +217,7 @@ def main(
         po4_l, base_l = len(po4xforms), len(base_xforms)
         po4_repeat = np.repeat(po4xforms, base_l, axis=0)
         base_tiled = np.tile(base_xforms, (po4_l, 1, 1))
-        index_tiled = np.tile(start_resnum_array, (1,))
+        index_tiled = np.tile(start_resnum_array, (po4_l,))
         rts = np.linalg.inv(po4_repeat) @ base_tiled
 
         # make the keys
@@ -221,25 +234,29 @@ def main(
 
         # retrieve the hits
         store_indices = hashmap[hit_keys]
-        hits_resnums = index_tiled[hits_mask]
+        sorter = np.argsort(store_indices)
+        sorted_inds = store_indices[sorter]
+        sorted_hit_keys = hit_keys[sorter]
+
+        sorted_hits_resnums = index_tiled[hits_mask][sorter]
         with h5py.File(hdf5_store_path, "r") as store:
-            store_keys = store["key_int"][store_indices]
-            store_chis = store["chis"][store_indices]
+            store_keys = store["key_int"][sorted_inds]
+            store_chis = store["chis"][sorted_inds]
             # Maybe check rts to make sure they were binned the same way
             # store_rt = store["rt"][store_indices]
 
         # check to make sure the table used is at least formatted like the hashmap
-        if not np.array_equal(hit_keys, store_keys):
+        if not np.array_equal(sorted_hit_keys, store_keys):
             raise ValueError("store keys are not the same as query keys!")
 
         # rosetta stuff to actually make the hits and dump them
-        for hit_num in range(0, len(hits_resnums)):
-            resnum = hits_resnums[hit_num]
+        for hit_num in range(0, len(sorted_hits_resnums)):
+            resnum = sorted_hits_resnums[hit_num]
             chi_set = store_chis[hit_num]
             working = graft.clone()
             working.replace_residue(resnum, pres.clone(), True)
             for i in range(1, len(chi_set) + 1):
-                working.set_chi(i, resnum, chi_set[i])
+                working.set_chi(i, resnum, chi_set[i - 1])
             success_name = f"graft_{graft_num}_resn_{resnum}_hit_{hit_num}.pdb"
             base_scaf_name = f"ori_{graft_num}_resn_{resnum}_hit_{hit_num}.pdb"
             working.dump_pdb(success_name)

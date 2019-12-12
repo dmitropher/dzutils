@@ -127,31 +127,32 @@ def main(
         big_num = 10000
         threshold = 0.1
         for i in range(big_num):
-            new_dofs = np.array(dofs)
-            perturb_dofs(new_dofs)
-            new_xyzs = NeRF(abcs, new_dofs)
-            target_stub_array = xyzs_to_stub_array(
-                new_xyzs, target_mask_array, center_mask_array
-            )
-            new_rts = np.linalg.inv(target_stub_array) @ base_xforms
-            new_rt_keys = binner.get_bin_index(new_rts)
-            new_keys_mask = hashmap.contains(new_rt_keys) == False
-            new_keys = new_rt_keys[new_keys_mask]
+            for j in range(1, 4, 0.25):
+                new_dofs = np.array(dofs)
+                perturb_dofs(new_dofs, factor=j)
+                new_xyzs = NeRF(abcs, new_dofs)
+                target_stub_array = xyzs_to_stub_array(
+                    new_xyzs, target_mask_array, center_mask_array
+                )
+                new_rts = np.linalg.inv(target_stub_array) @ base_xforms
+                new_rt_keys = binner.get_bin_index(new_rts)
+                new_keys_mask = hashmap.contains(new_rt_keys) == False
+                new_keys = new_rt_keys[new_keys_mask]
 
-            # update hashmap, store chis/keys/rts
-            # if new keys is less than threshold, break
-            hashmap[new_keys] = np.arange(
-                out["chis"].shape[0], out["chis"].shape[0] + len(new_keys)
-            )
-            old_end_index = out["chis"].shape[0]
-            out["chis"][old_end_index:] = store_chis[new_keys_mask]
-            out["key_int"][old_end_index:] = new_keys
-            out["rt"][old_end_index:] = new_rts[new_keys_mask]
-            portion_new = len(new_keys) / len(new_rt_keys)
-            # print(f"portion_new {portion_new} in loop {i}")
-            if portion_new < threshold:
-                print(f"threshold reached at {portion_new} in loop {i}. ")
-                break
+                # update hashmap, store chis/keys/rts
+                # if new keys is less than threshold, break
+                hashmap[new_keys] = np.arange(
+                    out["chis"].shape[0], out["chis"].shape[0] + len(new_keys)
+                )
+                old_end_index = out["chis"].shape[0]
+                out["chis"][old_end_index:] = store_chis[new_keys_mask]
+                out["key_int"][old_end_index:] = new_keys
+                out["rt"][old_end_index:] = new_rts[new_keys_mask]
+                portion_new = len(new_keys) / len(new_rt_keys)
+                # print(f"portion_new {portion_new} in loop {i}")
+                if portion_new < threshold:
+                    print(f"threshold reached at {portion_new} in loop {i}. ")
+                    break
         save_dict_as_bin(output_dir, hashmap, run_name, overwrite=erase)
 
 
