@@ -5,6 +5,19 @@ from dzutils.pdb_file_utils import pdb_files_in_dir as _pfd
 from dzutils.util import read_flag_file
 
 
+def atom_coords(pose, *selected):
+    coords = pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
+    if selected:
+        for i, j in selected:
+            xyz = pose.residue(i).xyz(j)
+            coords.append(xyz)
+        return coords
+    for residue in pose.residues:
+        for atom in residue.atoms():
+            coords.append(atom.xyz())
+    return coords
+
+
 def fuzzy_trim(pose, end, trim_amount, buffer=0):
     """
     performs delete_residue_range_slow from end - (1 through trim_amount) to end
