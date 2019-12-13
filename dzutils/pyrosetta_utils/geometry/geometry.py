@@ -1,6 +1,27 @@
 import numpy as _np
 
 
+def rmsd(atom_coords_1, atom_coords_2):
+    """
+    Takes two coord arrays of dim 2 or more and gets the rmsd
+
+    All numpy arrays, broadcastable, etc
+    """
+    return _np.sqrt(
+        _np.sum(
+            _np.square(
+                _np.linalg.norm(
+                    atom_coords_2 - atom_coords_1,
+                    axis=len(atom_coords_2.shape) - 2,
+                )
+            )
+            # shape -2 index here should be the number of points
+            / atom_coords_2.shape[-2],
+            axis=len(atom_coords_2.shape) - 2,
+        )
+    )
+
+
 def unit_vec(vec):
     """
     Returns the vector divided by its mag
