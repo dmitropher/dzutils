@@ -1,6 +1,6 @@
 import h5py
 import click
-from os import mkdir
+from os import makedirs
 from os.path import isdir
 
 
@@ -14,8 +14,14 @@ from os.path import isdir
 @click.option("-e", "--erase/--no-erase", default=False)
 @click.option("-c", "--chunk-size", default=150)
 @click.option("-o", "--output-dir", default=".")
-@click.option("-n", "--output-dir-names", default=".")
-@click.option("-p", "--expand-script", default=".")
+@click.option("-n", "--output-dir-names", default="out")
+@click.option(
+    "-p",
+    "--expand-script",
+    default="~/scripts/dzutils/dzutils/pyrosetta_utils/phos_binding/misc_scripts/expand_rotable_chis.py",
+)
+@click.option("-g", "--granularity-factor", default=0)
+@click.option("-s", "--search-radius", default=0)
 def main(
     task_file_path,
     hashmap_path,
@@ -27,13 +33,15 @@ def main(
     chunk_size=150,
     output_dir=".",
     output_dir_names="",
-    expand_script="~/scripts/dzutils/dzutils/pyrosetta_utils/phos_binding/misc_scripts/expand_inverse_rot_tables.py",
+    expand_script="~/scripts/dzutils/dzutils/pyrosetta_utils/phos_binding/misc_scripts/expand_rotable_chis.py",
+    granularity_factor=0,
+    search_radius=0,
 ):
     """
     """
 
     if not isdir(output_dir):
-        mkdir(output_dir)
+        makedirs(output_dir)
     with h5py.File(hdf5_store, "r") as f:
         num_chi_sets = f["chis"].shape[0]
 
@@ -43,7 +51,7 @@ def main(
             f"{output_dir}/{output_dir_names}_{start}_{start+chunk_size-1}"
         )
         if not isdir(dirname):
-            mkdir(dirname)
+            makedirs(dirname)
         run_cmd_string = f"""python  {
                     expand_script} {
                     hashmap_path} {
@@ -51,7 +59,9 @@ def main(
                     angle_res} -d {
                     angstrom_dist_res } -r {run_name
                     } {'-e' if erase else ''} -n {
-                    start}-{start+chunk_size-1} """
+                    start}-{start+chunk_size-1} {
+                    '-g ' + str(granularity_factor )if granularity_factor else ''} {
+                    '-s '+str(search_radius) if search_radius else ''}"""
         with open(f"{dirname}/run.sh", "w") as f:
             f.write(run_cmd_string)
         tasks.append(f"cd {dirname} ; bash run.sh")

@@ -193,17 +193,20 @@ def process_hits_by_rmsd(restype, ideal_chis, query_chis, super=True):
     """
     ideal_res = pyrosetta.rosetta.core.conformation.Residue(restype, False)
     query_res = pyrosetta.rosetta.core.conformation.Residue(restype, False)
-    ideal_res_pose = pyrosetta.rosetta.core.pose.Pose()
-    ideal_res_pose.append_residue_by_bond(ideal_res)
-    query_res_pose = pyrosetta.rosetta.core.pose.Pose()
-    query_res_pose.append_residue_by_bond(query_res)
+    # ideal_res_pose.append_residue_by_bond(ideal_res)
+
+    # query_res_pose.append_residue_by_bond(query_res)
 
     rmsd_list = []
     for ideal, query in zip(ideal_chis, query_chis):
-        set_rotamer_chis(ideal_res_pose.residue(1), *ideal)
-        set_rotamer_chis(query_res_pose.residue(1), *query)
+        rot_i = set_rotamer_chis(ideal_res, *ideal)
+        rot_q = set_rotamer_chis(query_res, *query)
+        query_res_pose = pyrosetta.rosetta.core.pose.Pose()
+        ideal_res_pose = pyrosetta.rosetta.core.pose.Pose()
+        query_res_pose.append_residue_by_bond(rot_q)
+        ideal_res_pose.append_residue_by_bond(rot_i)
         rmsd_list.append(
-            rotamer_rmsd(ideal_res_pose, query_res_pose, super=super)
+            rotamer_rmsd(query_res_pose, ideal_res_pose, super=super)
         )
 
     return rmsd_list
@@ -242,10 +245,19 @@ def process_misses(restype, ideal_chis_list, query_chis_list):
     for chis in query_chis_list:
         ideal_chis_index = nearest_chi_tree.query(chis)[1]
         ideal_chis = chi_data[ideal_chis_index]
-        set_rotamer_chis(ideal_res_pose.residue(1), *ideal_chis)
-        set_rotamer_chis(query_res_pose.residue(1), *chis)
+        # set_rotamer_chis(ideal_res_pose.residue(1), *ideal_chis)
+        # set_rotamer_chis(query_res_pose.residue(1), *chis)
+        # rmsd_list.append(
+        #     rotamer_rmsd(ideal_res_pose, query_res_pose, super=super)
+        # )
+        rot_i = set_rotamer_chis(ideal_res, *ideal_chis)
+        rot_q = set_rotamer_chis(query_res, *chis)
+        query_res_pose = pyrosetta.rosetta.core.pose.Pose()
+        ideal_res_pose = pyrosetta.rosetta.core.pose.Pose()
+        query_res_pose.append_residue_by_bond(rot_q)
+        ideal_res_pose.append_residue_by_bond(rot_i)
         rmsd_list.append(
-            rotamer_rmsd(ideal_res_pose, query_res_pose, super=super)
+            rotamer_rmsd(query_res_pose, ideal_res_pose, super=super)
         )
         ideal_chi_list.append(ideal_chis)
     return rmsd_list, ideal_chi_list

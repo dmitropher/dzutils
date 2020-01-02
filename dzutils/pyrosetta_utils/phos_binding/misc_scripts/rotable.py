@@ -372,6 +372,9 @@ def consolidate_chis(chis_array, num_chis=3, round_fraction=0.01):
 def expand_rotamer_set(
     chi_array, search_radius, granularity_factor, round_fraction
 ):
+    """
+    Takes a chi array and does a scan about the rotamer given with given params
+    """
     rotamer_set = set([np.uint64(0)][1:])
     num_chi_sets = chi_array.shape[0]
     # logger.debug (num_chi_sets)
@@ -401,7 +404,48 @@ def expand_rotamer_set(
             rotamer_set = set(uint_rot_repr)
             continue
         rotamer_set = rotamer_set.union(set(uint_rot_repr))
+
     return rotamer_set
+
+
+def expand_rotamer_array(
+    chi_array, search_radius, granularity_factor, round_fraction
+):
+    """
+    Takes a chi array and does a scan about the rotamer given with given params
+    """
+    rotamer_set = set([np.uint64(0)][1:])
+    num_chi_sets = chi_array.shape[0]
+    # logger.debug (num_chi_sets)
+    num_chis = chi_array.shape[-1]
+    for i in range(num_chi_sets):
+        chis = chi_array[i]
+
+        col_space = np.empty((num_chis, granularity_factor), dtype=np.float64)
+        for j in range(num_chis):
+            col_space[j, :] = np.linspace(
+                chis[j] - np.float64(search_radius),
+                chis[j] + np.float64(search_radius),
+                granularity_factor,
+            )
+
+        expanded = np.asarray(col_space, dtype=np.float64)
+
+        fine_chis = np.array(numba_cartesian(expanded))
+
+        uint_rot_repr = bit_pack_rotamers(
+            fine_chis, num_chis=num_chis, round_fraction=round_fraction
+        )
+        if not len(rotamer_set):
+            rotamer_set = set(uint_rot_repr)
+            continue
+        rotamer_set = rotamer_set.union(set(uint_rot_repr))
+    expanded_packed = np.fromiter(rotamer_set, np.uint64())
+    expanded_array = unpack_chis(
+        expanded_packed, num_chis=num_chis, round_fraction=round_fraction
+    )
+
+    return expanded_array
 
 
 def get_atom_chain_from_restype(res_type, *extra_atoms):

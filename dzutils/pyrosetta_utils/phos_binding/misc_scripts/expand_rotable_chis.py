@@ -22,7 +22,7 @@ from dzutils.pyrosetta_utils import residue_type_from_name3
 from dzutils.pyrosetta_utils.phos_binding.misc_scripts.rotable import (
     save_dict_as_bin,
     consolidate_chis,
-    expand_rotamer_set,
+    expand_rotamer_array,
     unpack_chis,
     get_dof_templates_from_rotamer_rt_array,
     chis_array_to_rt_array,
@@ -86,17 +86,22 @@ def main(
     chis_to_expand = consolidate_chis(
         np.array(store_chis), num_chis=num_chis, round_fraction=np.float(0.01)
     )
-    new_chis_set = expand_rotamer_set(
+    # new_chis_set = expand_rotamer_set(
+    #     chis_to_expand,
+    #     search_radius=search_radius,
+    #     granularity_factor=granularity_factor,
+    #     round_fraction=np.float(0.01),
+    # )
+    # packed_chis = np.fromiter(new_chis_set, np.uint64())
+    # new_chis = unpack_chis(
+    #     packed_chis, num_chis=num_chis, round_fraction=np.float(0.01)
+    # )
+    new_chis = expand_rotamer_array(
         chis_to_expand,
-        search_radius=search_radius,
-        granularity_factor=granularity_factor,
+        search_radius,
+        granularity_factor,
         round_fraction=np.float(0.01),
     )
-    packed_chis = np.fromiter(new_chis_set, np.uint64())
-    new_chis = unpack_chis(
-        packed_chis, num_chis=num_chis, round_fraction=np.float(0.01)
-    )
-
     # Convert rosetta residue to nerf object
     pyrosetta.init(
         """-out:level 100

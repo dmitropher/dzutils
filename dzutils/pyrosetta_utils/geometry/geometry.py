@@ -14,19 +14,19 @@ def rmsd(atom_coords_1, atom_coords_2):
                     atom_coords_2 - atom_coords_1,
                     axis=len(atom_coords_2.shape) - 2,
                 )
-            )
+            ),
             # shape -2 index here should be the number of points
-            / atom_coords_2.shape[-2],
             axis=len(atom_coords_2.shape) - 2,
         )
+        / atom_coords_2.shape[-2]
     )
 
 
-def unit_vec(vec):
+def unit_vec(vec, axis=0):
     """
     Returns the vector divided by its mag
     """
-    return vec / _np.linalg.norm(vec)
+    return vec / _np.linalg.norm(vec, axis)
 
 
 def projection(point, plane_point, plane_normal):
