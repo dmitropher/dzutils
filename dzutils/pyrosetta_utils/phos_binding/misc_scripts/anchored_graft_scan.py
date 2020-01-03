@@ -65,192 +65,68 @@ def get_graft_sites(pose_structs):
     ]
 
 
-# def super_and_graft(
-#     pose, fragment, insert_align, pose_align, *ligands, margin=5, label=""
-# ):
-#     """
-#     """
-#
-#     super_resi_by_bb(fragment, pose, insert_align, pose_align)
-#     subpose_after_graft = (
-#         pyrosetta.rosetta.protocols.grafting.return_region(
-#             pose.clone(), pose_align + 1, len(pose.residues)
-#         )
-#         if len(pose.residues) > pose_align
-#         else pyrosetta.rosetta.core.pose.Pose()
-#     )
-#     subpose_before_graft = pyrosetta.rosetta.protocols.grafting.return_region(
-#         pose.clone(), 1, pose_align - 1
-#     )
-#     # preceding_loop = parse_structure_from_dssp(subpose_before_graft, "L")[
-#     #     -1
-#     # ]
-#     # first_struct = parse_structure_from_dssp(pose, *"EH")[0]
-#     if len(subpose_before_graft.residues) > margin:
-#         subpose_before_graft.delete_residue_range_slow(
-#             len(subpose_before_graft.residues) - margin,
-#             len(subpose_before_graft.residues),
-#         )
-#     if len(subpose_before_graft.residues) < margin:
-#         return link_poses(
-#             link_poses(fragment, subpose_after_graft), *ligands, rechain=True
-#         )
-#
-#     n_term_half = link_poses(subpose_before_graft, fragment, rechain=True)
-#     num_chains = n_term_half.num_chains()
-#
-#     print(f"segment lookup between chains {num_chains-1} and {num_chains}")
-#     segment_lookup_mover = run_direct_segment_lookup(
-#         n_term_half,
-#         from_chain=num_chains - 1,
-#         to_chain=num_chains,
-#         label=label,
-#     )
-#
-#     status = segment_lookup_mover.get_last_move_status()
-#     if status != pyrosetta.rosetta.protocols.moves.mstype_from_name(
-#         "MS_SUCCESS"
-#     ):
-#         print("mover status: ", status)
-#
-#         return
-#
-#     if not len(subpose_after_graft.residues):
-#         print("aligned to last res, not linking subpose after graft")
-#         if ligands:
-#             return link_poses(n_term_half, *ligands, rechain=True)
-#         else:
-#             return n_term_half
-#     print("linking n_term half and c term half")
-#     grafted = link_poses(n_term_half, subpose_after_graft, rechain=False)
-#     if ligands:
-#         return link_poses(grafted, *ligands, rechain=True)
-#     return grafted
-
-
 def graft(
     pose,
     fragment,
-    pose_cut_position,
+    n_term_position,
+    c_term_position,
     *ligands,
-    margin=3,
-    allow_terminal=False,
-    label="",
-    loop_close=False,
+    n_label="n_term_graft_site",
+    c_label="c_term_graft_site",
 ):
     """
+    Creates a pose where fragment is added between n_term_pos and c_term_pos
+
+    Labels the term with "n_term_graft_site"/"c_term_graft_site"
+    ligands are added as new chains at the end
+
+    Does not close loops
     """
+    pose_len = len(pose.residues)
+    c_terminal = pose_len > c_term_position
     subpose_after_graft = (
         pyrosetta.rosetta.protocols.grafting.return_region(
-            pose.clone(), pose_cut_position + 1, len(pose.residues)
+            pose.clone(), c_term_position, pose_len
         )
-        if len(pose.residues) > pose_cut_position
+        if c_terminal
         else pyrosetta.rosetta.core.pose.Pose()
     )
-    cut_pos = pose_cut_position - margin - 1
-    if cut_pos < 0:
-        if allow_terminal:
-            return link_poses(
-                link_poses(fragment, subpose_after_graft),
-                *ligands,
-                rechain=True,
-            )
-        else:
-            return []
-    subpose_before_graft = pyrosetta.rosetta.protocols.grafting.return_region(
-        pose.clone(), 1, cut_pos
-    )
-    n_term_chains = [chain for chain in subpose_before_graft.split_by_chain()]
-    link_portion = link_poses(n_term_chains[-1], fragment, rechain=True)
 
-    if loop_close:
-        logger.debug(f"segment lookup:")
-
-        segment_lookup_mover = run_direct_segment_lookup(
-            link_portion, length=4, label=label
+    c_term_label_index = 1 + n_term_position + len(fragment.residues)
+    if n_term_position == 0:
+        grafted = link_poses(
+            link_poses(fragment, subpose_after_graft, rechain=False),
+            *ligands,
+            rechain=True,
         )
+        pose.pdb_info().add_reslabel(c_term_label_index, c_label)
 
-        status = segment_lookup_mover.get_last_move_status()
-        if status != pyrosetta.rosetta.protocols.moves.mstype_from_name(
-            "MS_SUCCESS"
-        ):
-            print("mover status: ", status)
-            return []
+    subpose_before_graft = pyrosetta.rosetta.protocols.grafting.return_region(
+        pose.clone(), 1, n_term_position
+    )
 
-    grafted = []
-    n_term_chains[-1] = link_portion
-    if not len(subpose_after_graft.residues):
-        print("aligned to last res, not linking subpose after graft")
-        if ligands:
-            grafted.append(
-                link_poses(
-                    *n_term_chains.split_by_chain(), *ligands, rechain=True
-                )
-            )
-        else:
-            grafted.append(
-                link_poses(*n_term_chains.split_by_chain(), rechain=True)
-            )
-        if loop_close:
-            for link_portion_more in iter(
-                segment_lookup_mover.get_additional_output, None
-            ):
-                n_term_chains[-1] = link_portion_more
-                if ligands:
-                    grafted.append(
-                        link_poses(
-                            *n_term_chains.split_by_chain(),
-                            *ligands,
-                            rechain=True,
-                        )
-                    )
-                else:
-                    grafted.append(
-                        link_poses(
-                            *n_term_chains.split_by_chain(), rechain=True
-                        )
-                    )
-        return grafted
-    print("linking n_term half and c term half")
-    # n_term_chains = [chain for chain in n_term_half.split_by_chain()]
+    n_term_chains = [chain for chain in subpose_before_graft.split_by_chain()]
     c_term_chains = [chain for chain in subpose_after_graft.split_by_chain()]
-
-    # n_term_final = n_term_chains[-1]
-    c_term_first = c_term_chains[0]
-    grafted_chain = link_poses(link_portion, c_term_first, rechain=False)
+    grafted_chain = link_poses(
+        n_term_chains[-1], fragment, c_term_chains[0], rechain=False
+    )
 
     all_chains = [*n_term_chains[:-1], grafted_chain, *c_term_chains[1:]]
 
     if ligands:
-        grafted.append(link_poses(*all_chains, *ligands, rechain=True))
+        grafted = link_poses(*all_chains, *ligands, rechain=True)
     else:
-        grafted.append(link_poses(*all_chains, rechain=True))
-    for link_portion_more in iter(
-        segment_lookup_mover.get_additional_output, None
-    ):
-        c_term_first = c_term_chains[0]
-        grafted_chain = link_poses(
-            link_portion_more, c_term_first, rechain=False
-        )
+        grafted = link_poses(*all_chains, rechain=True)
 
-        all_chains = [*n_term_chains[:-1], grafted_chain, *c_term_chains[1:]]
+    c_term_label_index = 1 + n_term_position + len(fragment.residues)
+    pose.pdb_info().add_reslabel(c_term_label_index, c_label)
+    pose.pdb_info().add_reslabel(n_term_position, n_label)
 
-        if ligands:
-            grafted.append(link_poses(*all_chains, *ligands, rechain=True))
-        else:
-            grafted.append(link_poses(*all_chains, rechain=True))
     return grafted
 
 
 def graft_fragment(
-    pose,
-    fragment,
-    site,
-    allowed_depth=3,
-    save_intermediate=True,
-    get_additional_output=True,
-    label="",
-    loop_close=False,
+    pose, fragment, site, use_start=True, allowed_depth=3, allowed_trim=4
 ):
     """
     Super grafts the fragment based on positions matching secstruct to site
@@ -259,6 +135,8 @@ def graft_fragment(
     allowed_depth gives the allowed number of residues to "chew into" site
 
     begin only as false not supported yet (appending fragment)
+
+    inserts with more than two chains (aa and phos) are not supported yet
     """
     if site.dssp_type == "L":
         print("loops not supported")
@@ -276,9 +154,8 @@ def graft_fragment(
         )
 
         grafts = []
-
-        for start in frag_starts:
-            if start == 1:
+        for anchor in frag_starts:
+            if anchor == 1:
                 continue
 
             for i in range(allowed_depth + 1):
@@ -286,9 +163,11 @@ def graft_fragment(
                     break
                 # work on a copy of the fragment
                 insert = fragment.clone()
-                graft_pos = site.start_pos + i
+                graft_pos = (
+                    site.start_pos + i if use_start else site.end_pos - i
+                )
                 super_xform = homog_super_transform_from_residues(
-                    insert.residue(start), pose.residue(graft_pos)
+                    insert.residue(anchor), pose.residue(graft_pos)
                 )
                 rotation, translation = np_homog_to_rosetta_rotation_translation(
                     super_xform
@@ -302,13 +181,16 @@ def graft_fragment(
                 )
                 # cut out the last chain of the fragment assume its phos
                 phos = insert.split_by_chain()[insert.num_chains()]
-                if len(insert.residues) > start:
-                    insert.delete_residue_range_slow(
-                        start + 1, len(insert.residues)
-                    )
-
+                if use_start:
+                    if len(insert.residues) > anchor:
+                        insert.delete_residue_range_slow(
+                            anchor + 1, len(insert.residues)
+                        )
+                else:
+                    if anchor > 1:
+                        insert.delete_residue_range_slow(1, anchor - 1)
                 # Make sure we're only operating on a single chain at a time
-                insert = insert.split_by_chain()[chain_of(insert, start)]
+                insert = insert.split_by_chain()[chain_of(insert, anchor)]
                 logger.debug(
                     f"""insert seq:
                 {insert.annotated_sequence()}"""
@@ -323,18 +205,21 @@ def graft_fragment(
                 )
                 logger.debug(f"site: {site}")
                 logger.debug(f"pose graft site: {site}")
+                for j in range(allowed_trim + 1):
+                    n_anchor = (
+                        graft_pos - (i + j) - 1 if use_start else graft_pos
+                    )
+                    c_anchor = (
+                        graft_pos if use_start else graft_pos + (i + j) + 1
+                    )
+                    if n_anchor < 1:
+                        break
+                    grafted = graft(
+                        pose.clone(), insert, n_anchor, c_anchor, phos
+                    )
 
-                grafted = graft(
-                    pose.clone(),
-                    insert,
-                    graft_pos,
-                    phos,
-                    margin=i + 4,
-                    label=label,
-                )
-
-                if grafted:
-                    grafts.extend(grafted)
+                    if grafted:
+                        grafts.append(grafted)
 
                     # grafted.dump_pdb(outname)
 
