@@ -13,11 +13,7 @@ from pyrosetta.rosetta.core.select.residue_selector import TrueResidueSelector
 from dzutils.pyrosetta_utils.secstruct.structure import (
     parse_structure_from_dssp,
 )
-from dzutils.pyrosetta_utils.chain_utils import (
-    link_poses,
-    chain_of,
-    run_direct_segment_lookup,
-)
+from dzutils.pyrosetta_utils.chain_utils import link_poses, chain_of
 
 from dzutils.pyrosetta_utils import run_pyrosetta_with_flags
 
