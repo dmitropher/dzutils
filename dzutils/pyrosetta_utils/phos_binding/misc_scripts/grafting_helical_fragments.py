@@ -2,14 +2,11 @@ import numpy as np
 
 from dzutils.pyrosetta_utils.geometry.parametric import ca_array
 from dzutils.pyrosetta_utils.geometry import (
-    stub_to_homog,
     homog_from_four_points,
     np_homog_to_rosetta_rotation_translation,
     homog_from_3_CA,
 )
-from pyrosetta.rosetta.core.kinematics import Stub, RT
 from pyrosetta.rosetta.numeric import xyzVector_double_t as rosetta_vector
-from pyrosetta.rosetta.core.kinematics import Stub, RT
 from pyrosetta.rosetta.protocols.toolbox.pose_manipulation import (
     rigid_body_move,
 )

@@ -17,16 +17,10 @@ import pyrosetta
 from dzutils.pyrosetta_utils import residue_type_from_name3
 from dzutils.pyrosetta_utils.geometry.pose_xforms import RotamerRTArray
 from dzutils.pyrosetta_utils.phos_binding.misc_scripts.rotable import (
-    chis_array_to_rt_array,
-    consolidate_chis,
-    expand_rotamer_set,
     fill_dof_template,
-    get_dof_templates_from_rotamer_rt_array,
-    get_new_key_mask_from_hashmap,
     rotamer_rt_array_to_dof_template,
     rotamer_rt_array_to_target_mask,
     save_dict_as_bin,
-    unpack_chis,
     xyzs_to_stub_array,
 )
 

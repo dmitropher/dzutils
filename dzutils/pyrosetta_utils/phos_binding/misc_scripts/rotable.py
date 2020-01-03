@@ -6,7 +6,7 @@ import pandas as pd
 
 # AP Moyer
 import getpy as gp
-from nerf import iNeRF, NeRF, perturb_dofs
+from nerf import iNeRF, NeRF
 
 # Will Sheffler
 from homog import hstub

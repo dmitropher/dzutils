@@ -144,23 +144,6 @@ def replace_chain_by_number(pose, replacement, chain_num):
     )
 
 
-def pose_excluding_chain(pose, *chain_nums):
-    """
-    Returns a pose without the listed chain
-    """
-    chains = [
-        p
-        for i, p in enumerate(pose.split_by_chain(), 1)
-        if i not in chain_nums
-    ]
-    # new_pose = chains[0]
-    # for i, chain in enumerate(chains[1:], 1):
-    #     new_pose.append_pose_by_jump(chain, i)
-    print("linking chains")
-    new_pose = link_poses(*chains, rechain=True)
-    return new_pose
-
-
 def trim_pose_to_term(pose, target, terminus=None):
     """
     Removes residues from start to chosen terminus, returns the pose

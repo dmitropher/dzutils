@@ -3,10 +3,6 @@ from itertools import permutations
 import numpy as np
 from xbin import XformBinner as xb
 
-from dzutils.pyrosetta_utils.geometry.pose_xforms import (
-    generate_pose_rt_between_res,
-    PoseStubArray,
-)
 from dzutils.pyrosetta_utils.geometry.homog import homog_from_residue
 from dzutils.pyrosetta_utils import (
     bonded_atoms,

@@ -11,7 +11,7 @@ import pyrosetta
 # AP Moyer
 import getpy as gp
 
-from nerf import iNeRF, NeRF, perturb_dofs
+from nerf import NeRF
 
 # Will Sheffler
 from xbin import XformBinner as xb
@@ -23,9 +23,6 @@ from dzutils.pyrosetta_utils.phos_binding.misc_scripts.rotable import (
     save_dict_as_bin,
     consolidate_chis,
     expand_rotamer_array,
-    unpack_chis,
-    get_dof_templates_from_rotamer_rt_array,
-    chis_array_to_rt_array,
     get_new_key_mask_from_hashmap,
     rotamer_rt_array_to_dof_template,
     rotamer_rt_array_to_target_mask,
