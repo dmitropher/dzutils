@@ -53,7 +53,6 @@ def pairs_in_range(
         for val in range(min_size, max_size + 1)
         if start + val >= min_end_position and start + val <= end
     ]
-    # print(pairs)
     return pairs
 
 
@@ -296,19 +295,6 @@ def scan_for_inv_rot(
     )
     key_series = pd.Series(keys)
     results["inv_rot_key"] = key_series
-    # print (results)
-    # print (key_series)
-    # print (results.apply(
-    #     lambda row: binner.get_bin_index(
-    #         row[feature_xform_label]
-    #         @ generate_pose_rt_between_res(
-    #             pose.clone(), row["start_res"], row["p_res_target"]
-    #         )
-    #     ),
-    #     axis=1,
-    # )
-    # )
-    # print (results)
     # TODO - include the inv rot reference atoms as well as loop func to bb start
 
     # load inv_rot table and dict
