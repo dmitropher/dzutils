@@ -31,3 +31,10 @@ def beta_fragment():
     when pyrosetta behavior has changed.
     """
     return _pyrosetta.pose_from_file(f"{FILEPATH}/test_pdb/beta_fragment.pdb")
+
+
+def helical_fragment():
+    """
+    returns a helical fragment of 4uos from 51 to 64
+    """
+    return _pyrosetta.pose_from_file(f"{FILEPATH}/test_pdb/helifrag.pdb")

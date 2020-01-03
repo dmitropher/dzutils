@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import Mock as Mock
 import numpy as _np
+import pyrosetta
 import dzutils.pyrosetta_utils.geometry.homog as homog
 import dzutils.pyrosetta_utils.test_tools.test_poses as _tp
 
@@ -9,6 +10,13 @@ class TestHomogUtils(unittest.TestCase):
     """
     Test the homog xform creator functions
     """
+
+    def setUp(self):
+        pyrosetta.init(
+            """
+            -out:level 100
+            """
+        )
 
     def test_rotation_translation_to_homog(self):
         rosetta_matrix = Mock()

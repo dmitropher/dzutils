@@ -1,4 +1,5 @@
 import unittest
+import pyrosetta
 from unittest.mock import Mock as Mock
 import dzutils.pyrosetta_utils.chain_utils as chain_utils
 import dzutils.pyrosetta_utils.test_tools.test_poses as _tp
@@ -9,10 +10,19 @@ class TestChainUtils(unittest.TestCase):
     Test for chain_utils
     """
 
-    def test_posenum_in_chain(self):
-        pose = Mock()
-        pose.chain_begin = Mock(return_value=10)
-        self.assertEqual(1, chain_utils.posnum_in_chain(pose, 10))
+    def setUp(self):
+        """
+        """
+        pyrosetta.init(
+            """
+            -out:level 100
+            """
+        )
+
+    # def test_posenum_in_chain(self):
+    #     pose = Mock()
+    #     pose.chain_begin = Mock(return_value=10)
+    #     self.assertEqual(1, chain_utils.posnum_in_chain(pose, 10))
 
     def test_add_cut_out_of_bounds(self):
         pose = _tp.helical_monomer()
