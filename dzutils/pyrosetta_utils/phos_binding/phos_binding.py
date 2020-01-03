@@ -23,11 +23,6 @@ from dzutils.pyrosetta_utils import (
     build_hbond_set,
 )
 from dzutils.pyrosetta_utils.secstruct import parse_structure_from_dssp
-<<<<<<< HEAD
-=======
-
-from dzutils.pyrosetta_utils.chain_utils import link_poses
->>>>>>> f188d49070c4a03e261b7d7a3962bbd2cdb6b454
 
 
 def rt_list_hbond_to_res(pose, resnum, sidechain=False, minimal=False):
