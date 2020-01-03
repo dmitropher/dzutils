@@ -126,7 +126,13 @@ def graft(
 
 
 def graft_fragment(
-    pose, fragment, site, use_start=True, allowed_depth=3, allowed_trim=4
+    pose,
+    fragment,
+    site,
+    use_start=True,
+    allowed_depth=3,
+    allowed_trim=4,
+    dssp_type="H",
 ):
     """
     Super grafts the fragment based on positions matching secstruct to site
@@ -138,95 +144,80 @@ def graft_fragment(
 
     inserts with more than two chains (aa and phos) are not supported yet
     """
-    if site.dssp_type == "L":
-        print("loops not supported")
-    if site.dssp_type == "E":
-        print("sheets not supported")
-    if site.dssp_type == "H":
-        fragment_sec_structs = parse_structure_from_dssp(fragment, "H")
-        if not fragment_sec_structs:
-            return []
-        frag_starts, frag_ends = zip(
-            *[
-                (struct.start_pos, struct.end_pos)
-                for struct in fragment_sec_structs
-            ]
-        )
 
-        grafts = []
-        for anchor in frag_starts:
-            if anchor == 1:
-                continue
+    fragment_sec_structs = parse_structure_from_dssp(fragment, "H")
 
-            for i in range(allowed_depth + 1):
-                if i > site.end_pos - site.start_pos:
-                    break
-                # work on a copy of the fragment
-                insert = fragment.clone()
-                graft_pos = (
-                    site.start_pos + i if use_start else site.end_pos - i
+    anchors = [
+        (struct.start_pos if use_start else struct.end_pos)
+        for struct in fragment_sec_structs
+    ]
+    site_pos = site.start_pos if use_start else site.end_pos
+    grafts = []
+    for anchor in anchors:
+        if anchor == 1:
+            continue
+        working_frag = fragment.clone()
+        phos = working_frag.split_by_chain()[working_frag.num_chains()]
+        if use_start:
+            if len(working_frag.residues) > anchor:
+                working_frag.delete_residue_range_slow(
+                    anchor + 1, len(working_frag.residues)
                 )
-                super_xform = homog_super_transform_from_residues(
-                    insert.residue(anchor), pose.residue(graft_pos)
-                )
-                rotation, translation = np_homog_to_rosetta_rotation_translation(
-                    super_xform
-                )
-                rigid_body_move(
-                    rotation,
-                    translation,
-                    insert,
-                    TrueResidueSelector().apply(insert),
-                    rosetta_vector(0, 0, 0),
-                )
-                # cut out the last chain of the fragment assume its phos
-                phos = insert.split_by_chain()[insert.num_chains()]
-                if use_start:
-                    if len(insert.residues) > anchor:
-                        insert.delete_residue_range_slow(
-                            anchor + 1, len(insert.residues)
-                        )
-                else:
-                    if anchor > 1:
-                        insert.delete_residue_range_slow(1, anchor - 1)
-                # Make sure we're only operating on a single chain at a time
-                insert = insert.split_by_chain()[chain_of(insert, anchor)]
-                logger.debug(
-                    f"""insert seq:
-                {insert.annotated_sequence()}"""
-                )
-                logger.debug(
-                    f"""pose seq:
-                {pose.annotated_sequence()}"""
-                )
-                logger.debug(
-                    f"""phos seq:
-                {phos.annotated_sequence()}"""
-                )
-                logger.debug(f"site: {site}")
-                logger.debug(f"pose graft site: {site}")
-                for j in range(allowed_trim + 1):
-                    n_anchor = (
-                        graft_pos - (i + j) - 1 if use_start else graft_pos
-                    )
-                    c_anchor = (
-                        graft_pos if use_start else graft_pos + (i + j) + 1
-                    )
-                    if n_anchor < 1:
-                        break
-                    grafted = graft(
-                        pose.clone(), insert, n_anchor, c_anchor, phos
-                    )
-
-                    if grafted:
-                        grafts.append(grafted)
-
-                    # grafted.dump_pdb(outname)
-
-        if grafts:
-            return grafts
         else:
-            return []
+            if anchor > 1:
+                working_frag.delete_residue_range_slow(1, anchor - 1)
+        insert = working_frag.split_by_chain()[chain_of(working_frag, anchor)]
+        start_val = -1 ** (not use_start)
+        for i in range(
+            0,
+            (min(site.end_pos - site.start_pos, allowed_depth) + 1)
+            * start_val,
+            start_val,
+        ):
+
+            # work on a copy of the fragment
+            graft_pos = site_pos + i
+            super_xform = homog_super_transform_from_residues(
+                insert.residue(anchor), pose.residue(graft_pos)
+            )
+            rotation, translation = np_homog_to_rosetta_rotation_translation(
+                super_xform
+            )
+            rigid_body_move(
+                rotation,
+                translation,
+                insert,
+                TrueResidueSelector().apply(insert),
+                rosetta_vector(0, 0, 0),
+            )
+
+            logger.debug("insert seq:")
+            logger.debug(f"{insert.annotated_sequence()}")
+            logger.debug("pose seq:")
+            logger.debug(f"{pose.annotated_sequence()}")
+            logger.debug("phos seq:")
+            logger.debug(f"{phos.annotated_sequence()}")
+            logger.debug(f"site: {site}")
+            logger.debug(f"pose graft site: {site}")
+            cut_border = graft_pos + start_val
+
+            j_range = (
+                min(allowed_trim, site_pos - 1)
+                if use_start
+                else min(allowed_trim, len(pose.residues) - site_pos)
+            )
+
+            for j in range(0, j_range * start_val, start_val):
+                other_site = site_pos - j - start_val
+                n_anchor = min(other_site, cut_border)
+                c_anchor = max(other_site, cut_border)
+
+                grafted = graft(pose.clone(), insert, n_anchor, c_anchor, phos)
+
+                if grafted:
+                    grafts.append(grafted)
+
+    return grafts
 
 
 def get_anchor_sites(
