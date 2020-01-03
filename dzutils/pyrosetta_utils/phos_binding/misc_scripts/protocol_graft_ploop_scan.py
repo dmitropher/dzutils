@@ -34,6 +34,9 @@ from dzutils.pyrosetta_utils.phos_binding.misc_scripts.anchored_graft_scan impor
     load_fragment_store_from_path,
     graft_generator,
 )
+from dzutils.pyrosetta_utils.phos_binding.misc_scripts.get_best_rmsd_phy_to_po4 import (
+    best_rmsd_phy_to_po4,
+)
 
 
 logger = logging.getLogger("graft_and_scan")
@@ -101,6 +104,7 @@ def get_bb_xyzs(pose, *resnums):
     help="Only attempt grafts on the chosen secondary structures (indexed from 0). Must be given a ',' separated string, sorry, Ill try to fix this later.",
 )
 @click.option("--same-chain/--no-same-chain", default=True)
+@click.option("-e", "--rmsd-threshold", default=0.5)
 def main(
     pose_pdb,
     fragment_store_path,
@@ -116,6 +120,7 @@ def main(
     struct_numbers="",
     same_chain=True,
     inverse_rotamer_radius=12,
+    rmsd_threshold=0.5,
 ):
     """
     This program takes a pose and a fragment store and returns alignment graphs
@@ -255,6 +260,8 @@ def main(
             chi_set = store_chis[hit_num]
             working = graft.clone()
             working.replace_residue(resnum, pres.clone(), True)
+            if best_rmsd_phy_to_po4(working) > rmsd_threshold:
+                continue
             for i in range(1, len(chi_set) + 1):
                 working.set_chi(i, resnum, chi_set[i - 1])
             success_name = f"graft_{graft_num}_resn_{resnum}_hit_{hit_num}.pdb"
