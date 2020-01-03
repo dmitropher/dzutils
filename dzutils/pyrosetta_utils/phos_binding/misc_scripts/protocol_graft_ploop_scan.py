@@ -30,7 +30,7 @@ from dzutils.pyrosetta_utils import (
 
 from dzutils.pyrosetta_utils.chain_utils import chain_of
 
-from dzutils.pyrosetta_utils.phos_binding.misc_scripts.anchored_graft_scan import (
+from dzutils.pyrosetta_utils.anchored_graft_scan import (
     load_fragment_store_from_path,
     graft_generator,
 )
