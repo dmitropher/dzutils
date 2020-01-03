@@ -119,8 +119,8 @@ def graft(
         grafted = link_poses(*all_chains, rechain=True)
 
     c_term_label_index = 1 + n_term_position + len(fragment.residues)
-    pose.pdb_info().add_reslabel(c_term_label_index, c_label)
-    pose.pdb_info().add_reslabel(n_term_position, n_label)
+    grafted.pdb_info().add_reslabel(c_term_label_index, c_label)
+    grafted.pdb_info().add_reslabel(n_term_position, n_label)
 
     return grafted
 
@@ -142,10 +142,11 @@ def graft_fragment(
 
     begin only as false not supported yet (appending fragment)
 
-    inserts with more than two chains (aa and phos) are not supported yet
+    inserts with more than one chain treat all chains past the first as "ligands"
+    grafting chain breaks not supported yet
     """
 
-    fragment_sec_structs = parse_structure_from_dssp(fragment, "H")
+    fragment_sec_structs = parse_structure_from_dssp(fragment, dssp_type)
 
     anchors = [
         (struct.start_pos if use_start else struct.end_pos)
@@ -154,10 +155,11 @@ def graft_fragment(
     site_pos = site.start_pos if use_start else site.end_pos
     grafts = []
     for anchor in anchors:
-        if anchor == 1:
-            continue
+        logger.debug(f"anchor: {anchor}")
         working_frag = fragment.clone()
-        phos = working_frag.split_by_chain()[working_frag.num_chains()]
+        ligands = list(working_frag.split_by_chain())[
+            1 : working_frag.num_chains()
+        ]
         if use_start:
             if len(working_frag.residues) > anchor:
                 working_frag.delete_residue_range_slow(
@@ -166,6 +168,8 @@ def graft_fragment(
         else:
             if anchor > 1:
                 working_frag.delete_residue_range_slow(1, anchor - 1)
+                anchor = 1
+
         insert = working_frag.split_by_chain()[chain_of(working_frag, anchor)]
         start_val = -1 ** (not use_start)
         for i in range(
@@ -195,8 +199,10 @@ def graft_fragment(
             logger.debug(f"{insert.annotated_sequence()}")
             logger.debug("pose seq:")
             logger.debug(f"{pose.annotated_sequence()}")
-            logger.debug("phos seq:")
-            logger.debug(f"{phos.annotated_sequence()}")
+            logger.debug("ligands seq:")
+            logger.debug(
+                f"{'   '.join([lig.annotated_sequence() for lig in ligands ])}"
+            )
             logger.debug(f"site: {site}")
             logger.debug(f"pose graft site: {site}")
             cut_border = graft_pos + start_val
@@ -211,10 +217,13 @@ def graft_fragment(
                 other_site = site_pos - j - start_val
                 n_anchor = min(other_site, cut_border)
                 c_anchor = max(other_site, cut_border)
+                logger.debug(f"n_anchor {n_anchor}")
+                logger.debug(f"c_anchor {c_anchor}")
+                grafted = graft(
+                    pose.clone(), insert.clone(), n_anchor, c_anchor, *ligands
+                )
 
-                grafted = graft(pose.clone(), insert, n_anchor, c_anchor, phos)
-
-                if grafted:
+                if not grafted is None:
                     grafts.append(grafted)
 
     return grafts
@@ -250,15 +259,7 @@ def get_anchor_sites(
 
 
 def graft_generator(
-    pose,
-    fragments,
-    dssp_types="",
-    anchor_end=True,
-    save_intermediate=True,
-    get_additional_output=True,
-    struct_numbers="",
-    label="",
-    loop_close=False,
+    pose, fragments, dssp_types="", anchor_end=True, struct_numbers=""
 ):
     """
     Takes a pose, fragments, and secondary structure containers for the pose
@@ -272,12 +273,7 @@ def graft_generator(
             struct_numbers=struct_numbers,
         ):
             for graft in graft_fragment(
-                pose,
-                fragment,
-                site,
-                save_intermediate=save_intermediate,
-                get_additional_output=get_additional_output,
-                label=label,
+                pose, fragment, site, use_start=anchor_end
             ):
 
                 yield graft
