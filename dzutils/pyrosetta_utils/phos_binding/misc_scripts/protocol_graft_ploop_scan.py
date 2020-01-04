@@ -139,10 +139,7 @@ def main(
         pose,
         fragments,
         dssp_types=dssp_match_types,
-        save_intermediate=save,
-        get_additional_output=get_additional_output,
         struct_numbers=struct_numbers,
-        label=label,
     )
 
     pres = residue_from_name3("PHY")

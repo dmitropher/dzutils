@@ -96,7 +96,9 @@ def graft(
             rechain=True,
         )
         pose.pdb_info().add_reslabel(c_term_label_index, c_label)
-
+    logger.debug("making n_term half")
+    logger.debug(f"sequence: {pose.annotated_sequence()}")
+    logger.debug(f"going from 1 to {n_term_position}")
     subpose_before_graft = pyrosetta.rosetta.protocols.grafting.return_region(
         pose.clone(), 1, n_term_position
     )
