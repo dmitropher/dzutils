@@ -23,7 +23,6 @@ from dzutils.pyrosetta_utils.geometry.homog import (
 )
 
 logger = logging.getLogger("anchored_graft")
-
 logger.setLevel(logging.DEBUG)
 
 
@@ -78,6 +77,7 @@ def graft(
 
     Does not close loops
     """
+    logger.debug("test")
     pose_len = len(pose.residues)
     c_terminal = pose_len > c_term_position
     subpose_after_graft = (
@@ -96,9 +96,9 @@ def graft(
             rechain=True,
         )
         pose.pdb_info().add_reslabel(c_term_label_index, c_label)
-    logger.debug("making n_term half")
-    logger.debug(f"sequence: {pose.annotated_sequence()}")
-    logger.debug(f"going from 1 to {n_term_position}")
+    print("making n_term half")
+    print(f"sequence: {pose.annotated_sequence()}")
+    print(f"going from 1 to {n_term_position}")
     subpose_before_graft = pyrosetta.rosetta.protocols.grafting.return_region(
         pose.clone(), 1, n_term_position
     )
@@ -204,7 +204,7 @@ def graft_fragment(
             logger.debug(f"site: {site}")
             logger.debug(f"pose graft site: {site}")
             cut_border = graft_pos + start_val
-
+            print(f"site_pos { site_pos}")
             j_range = (
                 min(allowed_trim, site_pos - 1)
                 if use_start
@@ -212,7 +212,7 @@ def graft_fragment(
             )
 
             for j in range(0, j_range * start_val, start_val):
-                other_site = site_pos - j - start_val
+                other_site = max(1, site_pos - j - start_val)
                 n_anchor = min(other_site, cut_border)
                 c_anchor = max(other_site, cut_border)
                 logger.debug(f"n_anchor {n_anchor}")

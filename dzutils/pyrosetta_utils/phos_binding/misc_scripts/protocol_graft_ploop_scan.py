@@ -1,4 +1,5 @@
 import logging
+
 from itertools import permutations
 
 import pyrosetta
@@ -38,9 +39,10 @@ from dzutils.pyrosetta_utils.phos_binding.misc_scripts.get_best_rmsd_phy_to_po4 
     best_rmsd_phy_to_po4,
 )
 
+root = logging.getLogger()
+root.setLevel(logging.DEBUG)
 
-logger = logging.getLogger("graft_and_scan")
-
+logger = logging.getLogger("graft_scan")
 logger.setLevel(logging.DEBUG)
 
 
