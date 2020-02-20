@@ -87,9 +87,9 @@ def link_poses(*poses, rechain=False):
     No alignment, fold tree not smoothed, can take a single pose, returns a copy
     """
     assert bool(len(poses)), "number of input poses must be greater than 0"
-    target = _pyrosetta.rosetta.core.pose.Pose()
-    target.detached_copy(poses[0])
-    # target = poses[0].clone()
+    # target = _pyrosetta.rosetta.core.pose.Pose()
+    # target.detached_copy(poses[0])
+    target = poses[0].clone()
     # n_jump = target.num_jump()
     assert bool(len(target.residues) > 0), "Cannot link poses with 0 residues!"
     if rechain:
@@ -296,6 +296,47 @@ def run_direct_segment_lookup(
     return mover
 
 
+def closed_loop_generator(
+    pose,
+    label="naive_loop",
+    database="/home/fordas/databases/vall.json",
+    length=5,
+    rmsd_tol=0.5,
+    cluster_tol=1.75,
+    from_chain=1,
+    to_chain=2,
+):
+    """
+    wrapper for run_direct_segment_lookup which returns a pose generator
+    """
+    working_pose = pose.clone()
+    print("running direct segment lookup")
+    segment_lookup_mover = run_direct_segment_lookup(
+        working_pose,
+        label=label,
+        database=database,
+        length=length,
+        rmsd_tol=rmsd_tol,
+        cluster_tol=cluster_tol,
+        from_chain=from_chain,
+        to_chain=to_chain,
+    )
+    print("mover complete")
+
+    # Remember to check for NULL !!!
+    status = segment_lookup_mover.get_last_move_status()
+    if status != _pyrosetta.rosetta.protocols.moves.mstype_from_name(
+        "MS_SUCCESS"
+    ):
+        print("mover status: ", status)
+        raise StopIteration
+    yield working_pose
+    for working_pose in iter(segment_lookup_mover.get_additional_output, None):
+        print("popped pose from mover")
+        print(working_pose)
+        yield working_pose
+
+
 def circular_permute(pose, position, many_loops=False, **kwargs):
     """
     Returns a pose that is a circular permutation of the input, cut at positions
@@ -306,35 +347,44 @@ def circular_permute(pose, position, many_loops=False, **kwargs):
 
     kwargs are for loop close, defaults are dz's "sensible" defaults
     """
-    assert bool(
-        position < len(pose.residues)
-    ), "Cut position cannot be the last residue"
-    assert bool(pose.num_chains() == 1), "pose must only have one chain"
+    if position >= len(pose.residues):
+        raise AssertionError("Cut position cannot be the last residue")
+    if pose.num_chains() != 1:
+        raise AssertionError("pose must only have one chain")
+
     cut_pose = add_cut(pose.clone(), position + 1)
     chains = cut_pose.split_by_chain()
     reordered = link_poses(chains[2], chains[1], rechain=True)
-    if kwargs:
-        loop_close_mover = run_direct_segment_lookup(reordered, **kwargs)
-    else:
-        loop_close_mover = run_direct_segment_lookup(
-            reordered, length=7, rmsd_tol=0.7
-        )
-    status = loop_close_mover.get_last_move_status()
-    if status != _pyrosetta.rosetta.protocols.moves.mstype_from_name(
-        "MS_SUCCESS"
-    ):
-        print("mover status: ", status)
-        return
-    if many_loops:
-        return iter(loop_close_mover.get_additional_output, None)
-    return reordered
+
+    return list(closed_loop_generator(reordered, **kwargs))
+
+
+def circular_permutations_generator(
+    pose, *positions, many_loops=False, **kwargs
+):
+    """
+    same as circular permutation, but attempts each of the values in positions
+    """
+    for position in positions:
+        if position >= len(pose.residues):
+            raise AssertionError("Cut position cannot be the last residue")
+        if pose.num_chains() != 1:
+            raise AssertionError("pose must only have one chain")
+
+        cut_pose = add_cut(pose.clone(), position + 1)
+        chains = cut_pose.split_by_chain()
+        reordered = link_poses(chains[2], chains[1], rechain=True)
+
+        for struct in closed_loop_generator(reordered, **kwargs):
+            yield struct
 
 
 def circular_permutations(pose, *positions, many_loops=False, **kwargs):
     """
     same as circular permutation, but attempts each of the values in positions
     """
-    return [
-        circular_permute(pose, index, many_loops, **kwargs)
-        for index in positions
-    ]
+    return list(
+        circular_permutations_generator(
+            pose, *positions, many_loops=False, **kwargs
+        )
+    )

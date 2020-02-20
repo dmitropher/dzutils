@@ -5,6 +5,16 @@ from dzutils.pdb_file_utils import pdb_files_in_dir as _pfd
 from dzutils.util import read_flag_file
 
 
+def safe_load_pdbs(pdbs):
+    for pdb in pdbs:
+        try:
+            yield pyrosetta.pose_from_pdb(pdb)
+        except RuntimeError as e:
+            print(e)
+            print(f"unable to load: {pdb}")
+            continue
+
+
 def atom_coords(pose, *selected):
     coords = pyrosetta.rosetta.utility.vector1_numeric_xyzVector_double_t()
     if selected:

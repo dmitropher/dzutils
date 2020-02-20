@@ -68,6 +68,8 @@ def graft(
     *ligands,
     n_label="n_term_graft_site",
     c_label="c_term_graft_site",
+    label="anchored_graft",
+    allow_term=False,
 ):
     """
     Creates a pose where fragment is added between n_term_pos and c_term_pos
@@ -96,6 +98,7 @@ def graft(
             rechain=True,
         )
         pose.pdb_info().add_reslabel(c_term_label_index, c_label)
+        return grafted if allow_term else None
     print("making n_term half")
     print(f"sequence: {pose.annotated_sequence()}")
     print(f"going from 1 to {n_term_position}")
@@ -106,10 +109,16 @@ def graft(
     n_term_chains = [chain for chain in subpose_before_graft.split_by_chain()]
     c_term_chains = [chain for chain in subpose_after_graft.split_by_chain()]
     grafted_chain = link_poses(
-        n_term_chains[-1], fragment, c_term_chains[0], rechain=False
+        *[
+            chain
+            for chain in [n_term_chains[-1], fragment, c_term_chains[0]]
+            if len(chain.residues)
+        ],
+        rechain=False,
     )
 
     all_chains = [*n_term_chains[:-1], grafted_chain, *c_term_chains[1:]]
+    all_chains = [chain for chain in all_chains if len(chain.residues)]
 
     if ligands:
         grafted = link_poses(*all_chains, *ligands, rechain=True)
@@ -119,8 +128,33 @@ def graft(
     c_term_label_index = 1 + n_term_position + len(fragment.residues)
     grafted.pdb_info().add_reslabel(c_term_label_index, c_label)
     grafted.pdb_info().add_reslabel(n_term_position, n_label)
+    for i in range(n_term_position + 1, c_term_label_index):
+        grafted.pdb_info().add_reslabel(i, label)
 
     return grafted
+
+
+def compute_anchor_range(site, allowed_depth, use_start, nres):
+    """
+    """
+    if use_start:
+        # Use the start of the secstruct on target pose to anchor, cut forwards
+        longest_run = min(
+            [
+                allowed_depth,
+                nres - site.start_pos + 1,
+                site.end_pos - site.start_pos + 1,
+            ]
+        )
+
+        return range(0, longest_run)
+    else:
+        # use the end of the secstruct on target pose to anchor, cut backwards
+        longest_run = min(
+            [allowed_depth, site.end_pos - 1, site.end_pos - site.start_pos]
+        )
+
+        return range(0, -1 * longest_run, -1)
 
 
 def graft_fragment(
@@ -129,8 +163,9 @@ def graft_fragment(
     site,
     use_start=True,
     allowed_depth=3,
-    allowed_trim=4,
+    allowed_trim=6,
     dssp_type="H",
+    label="anchored_graft",
 ):
     """
     Super grafts the fragment based on positions matching secstruct to site
@@ -155,9 +190,11 @@ def graft_fragment(
     for anchor in anchors:
         logger.debug(f"anchor: {anchor}")
         working_frag = fragment.clone()
-        ligands = list(working_frag.split_by_chain())[
-            1 : working_frag.num_chains()
-        ]
+        # ligands = list(working_frag.split_by_chain())[
+        #     1 : working_frag.num_chains()
+        # ]
+
+        print(f"use_start {use_start}")
         if use_start:
             if len(working_frag.residues) > anchor:
                 working_frag.delete_residue_range_slow(
@@ -168,30 +205,49 @@ def graft_fragment(
                 working_frag.delete_residue_range_slow(1, anchor - 1)
                 anchor = 1
 
-        insert = working_frag.split_by_chain()[chain_of(working_frag, anchor)]
-        start_val = -1 ** (not use_start)
-        for i in range(
-            0,
-            (min(site.end_pos - site.start_pos, allowed_depth) + 1)
-            * start_val,
-            start_val,
-        ):
-
+        working_insert = working_frag.split_by_chain()[1]
+        i_range = compute_anchor_range(
+            site, allowed_depth, use_start, len(pose.residues)
+        )
+        print(i_range, list(i_range))
+        start_val = (-1) ** (not use_start)
+        for i in i_range:
+            insert = working_insert.clone()
+            ligands = list(fragment.clone().split_by_chain())[
+                1 : fragment.num_chains()
+            ]
             # work on a copy of the fragment
-            graft_pos = site_pos + i
-            super_xform = homog_super_transform_from_residues(
-                insert.residue(anchor), pose.residue(graft_pos)
-            )
-            rotation, translation = np_homog_to_rosetta_rotation_translation(
-                super_xform
-            )
-            rigid_body_move(
-                rotation,
-                translation,
-                insert,
-                TrueResidueSelector().apply(insert),
-                rosetta_vector(0, 0, 0),
-            )
+            super_target = site_pos + i
+            print(f"graft_pos: {super_target}, site_pos {site_pos}")
+            print(f"insert sequence: {insert.annotated_sequence()}")
+            print(f"pose_sequence: {pose.annotated_sequence()}")
+            try:
+                super_xform = homog_super_transform_from_residues(
+                    insert.residue(anchor), pose.residue(super_target)
+                )
+                rotation, translation = np_homog_to_rosetta_rotation_translation(
+                    super_xform
+                )
+                for p in [insert, *ligands]:
+                    rigid_body_move(
+                        rotation,
+                        translation,
+                        p,
+                        TrueResidueSelector().apply(p),
+                        rosetta_vector(0, 0, 0),
+                    )
+            except RuntimeError as e:
+                print(e)
+                print(
+                    "anchor",
+                    anchor,
+                    len(insert.residues),
+                    "graft_pos",
+                    super_target,
+                    len(pose.residues),
+                )
+
+                continue
 
             logger.debug("insert seq:")
             logger.debug(f"{insert.annotated_sequence()}")
@@ -203,7 +259,7 @@ def graft_fragment(
             )
             logger.debug(f"site: {site}")
             logger.debug(f"pose graft site: {site}")
-            cut_border = graft_pos + start_val
+            cut_border = super_target + start_val
             print(f"site_pos { site_pos}")
             j_range = (
                 min(allowed_trim, site_pos - 1)
@@ -212,13 +268,18 @@ def graft_fragment(
             )
 
             for j in range(0, j_range * start_val, start_val):
-                other_site = max(1, site_pos - j - start_val)
+                other_site = max(0, site_pos - j - start_val)
                 n_anchor = min(other_site, cut_border)
                 c_anchor = max(other_site, cut_border)
                 logger.debug(f"n_anchor {n_anchor}")
                 logger.debug(f"c_anchor {c_anchor}")
                 grafted = graft(
-                    pose.clone(), insert.clone(), n_anchor, c_anchor, *ligands
+                    pose.clone(),
+                    insert.clone(),
+                    n_anchor,
+                    c_anchor,
+                    *ligands,
+                    label=label,
                 )
 
                 if not grafted is None:
@@ -257,7 +318,13 @@ def get_anchor_sites(
 
 
 def graft_generator(
-    pose, fragments, dssp_types="", anchor_end=True, struct_numbers=""
+    pose,
+    fragments,
+    dssp_types="",
+    anchor_end=True,
+    allowed_depth=3,
+    struct_numbers="",
+    label="anchored_graft",
 ):
     """
     Takes a pose, fragments, and secondary structure containers for the pose
@@ -271,7 +338,12 @@ def graft_generator(
             struct_numbers=struct_numbers,
         ):
             for graft in graft_fragment(
-                pose, fragment, site, use_start=anchor_end
+                pose,
+                fragment,
+                site,
+                use_start=anchor_end,
+                label=label,
+                allowed_depth=allowed_depth,
             ):
 
                 yield graft
@@ -319,11 +391,7 @@ def main(
             pose,
             fragments,
             dssp_types=dssp_match_types,
-            save_intermediate=save,
-            get_additional_output=get_additional_output,
-            struct_numbers=struct_numbers,
             label="anchored_graft",
-            loop_close=True,
         ),
         1,
     ):
