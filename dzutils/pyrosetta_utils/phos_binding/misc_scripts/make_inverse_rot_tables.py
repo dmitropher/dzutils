@@ -21,12 +21,16 @@ logger.setLevel(logging.DEBUG)
 
 
 @click.command()
+@click.argument("resname", nargs=1)
+@click.argument("rt_bases", nargs=1, help="")
 @click.option("-a", "--angle-res", default=15.0)
 @click.option("-d", "--angstrom-dist-res", default=1.0)
 @click.option("-r", "--run-name", default="inverse_ptr_exchi7_rotamers")
 @click.option("-e", "--erase/--no-erase", default=False)
 @click.option("-i", "--ideal/--dont-include", default=False)
 def main(
+    resname,
+    rt_bases,
     run_name="inverse_ptr_exchi7_rotamers",
     angstrom_dist_res=1,
     angle_res=15,
@@ -46,9 +50,10 @@ def main(
         -extra_res_fa /home/dzorine/projects/phos_binding/params_files/p_loop_params/PHY_4_chi.params
         """
     )
-    resname = "PHY"
+    # resname = "PHY"
     restype = residue_type_from_name3(resname)
     residue = pyrosetta.rosetta.core.conformation.Residue(restype, False)
+
     possible_rt_bases = [
         [residue.atom_index(name) for name in ["P", "P", "OH", "O2P"]]
     ]

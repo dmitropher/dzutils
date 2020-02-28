@@ -3,6 +3,8 @@ from numpy import linspace
 from itertools import product
 import json
 
+from dzutils import pythonify
+
 
 class BundleGridRangeParam(object):
     """
@@ -46,7 +48,7 @@ class BundleGridBinaryParam(BundleGridRangeParam):
             "name": self.name,
             "type": "binary",
             "base_value": self.first_value,
-            "allow_others": True
+            "allow_other": True
             if self.first_value != self.second_value
             else False,
         }
@@ -314,6 +316,24 @@ class PyBundleGridSampler(object):
             for grid in self.all_helix_grids():
                 f.write(json.dumps(grid))
                 f.write("\n")
+
+    def make_bundle_generator(self, degrees=True):
+        for grid in self.all_helix_grids():
+            yield helix_bundle_maker_wrapper(
+                grid["helix_length"],
+                *[grid[i] for i in range(1, grid["num_helices"] + 1)],
+                degrees=True
+            )
+
+
+def sampler_from_json(path):
+    d = {}
+    with open(path, "r") as f:
+        d = pythonify(json.load(f))
+    sampler = PyBundleGridSampler(d["num_helices"], d["helix_length"])
+    for i in range(1, d["num_helices"] + 1):
+        sampler.set_helix_params_from_dicts(i, *d[i])
+    return sampler
 
 
 def configure_helix(helix, length, **params):
