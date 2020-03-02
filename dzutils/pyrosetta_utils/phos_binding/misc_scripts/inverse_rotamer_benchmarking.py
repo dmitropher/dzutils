@@ -64,7 +64,7 @@ base_atom_dict = {
     "PHY": [
         [
             get_rotamer_residue_from_name("PHY").atom_index(name)
-            for name in ["P", "P", "OH", "O2P"]
+            for name in ["P", "OH", "P", "O2P"]
         ]
     ],
 }
@@ -301,7 +301,7 @@ def chi_list_to_query_df(chi_data_list):
     return query_df, rotamer_rt_map
 
 
-def chi_list_to_query(chi_data_list):
+def chi_list_to_query(chi_data_list, target_atoms=[]):
     """
     Convert rotamer data list to a dataframe with chis and RTs (for all P bases)
 
@@ -314,16 +314,22 @@ def chi_list_to_query(chi_data_list):
 
         if resname not in rt_chi_key_map.keys():
             residue = get_rotamer_residue_from_name(resname)
+            target_atoms = (
+                target_atoms
+                if target_atoms
+                else get_base_atoms_from_name(resname)[0]
+            )
             rotamer_rt_map[resname] = RotamerRTArray(
                 residue=residue,
                 base_atoms=[2, 1, 2, 3],
-                target_atoms=get_base_atoms_from_name(resname)[0],
+                target_atoms=target_atoms,
                 inverse=True,
             )
             rt_chi_key_map[resname] = {"chis": [], "RTs": []}
         rotamer_rt_map[resname].set_all_chi(*rot_info[1:])
         rts = residue_inverse_rotamer_rts(
-            rotamer_rt_map[resname], get_base_atoms_from_name(resname)
+            rotamer_rt_map[resname],
+            [target_atoms],  # get_base_atoms_from_name(resname)
         )
         rt_chi_key_map[resname]["RTs"].extend(rts)
         rt_chi_key_map[resname]["chis"].extend(
@@ -347,6 +353,7 @@ def test_hash_table(
     xbin_ori_resl=15,
     hdf5_path="",
     super_hits_before_rmsd=True,
+    target_atoms=[],
 ):
     """
     Try the test_data rotamers on the table, return hits and misses with info
@@ -361,7 +368,7 @@ def test_hash_table(
     just the chis and the key
     """
     query_resnames, query_rts, query_chis, rotamer_rt_map = chi_list_to_query(
-        test_data
+        test_data, target_atoms=target_atoms
     )
     logger.debug("got query and rotamer")
     binner = xb(xbin_cart_resl, xbin_ori_resl)

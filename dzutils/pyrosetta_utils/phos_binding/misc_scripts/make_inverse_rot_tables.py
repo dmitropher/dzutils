@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import logging
 
 import click
@@ -22,7 +23,7 @@ logger.setLevel(logging.DEBUG)
 
 @click.command()
 @click.argument("resname", nargs=1)
-@click.argument("rt_bases", nargs=1, help="")
+@click.argument("rt_bases", nargs=1)
 @click.option("-a", "--angle-res", default=15.0)
 @click.option("-d", "--angstrom-dist-res", default=1.0)
 @click.option("-r", "--run-name", default="inverse_ptr_exchi7_rotamers")
@@ -53,9 +54,9 @@ def main(
     # resname = "PHY"
     restype = residue_type_from_name3(resname)
     residue = pyrosetta.rosetta.core.conformation.Residue(restype, False)
-
+    # ["P", "P", "OH", "O2P"]
     possible_rt_bases = [
-        [residue.atom_index(name) for name in ["P", "P", "OH", "O2P"]]
+        [residue.atom_index(name) for name in rt_bases.split(" ")]
     ]
 
     rts, chis_index, alignment_atoms = rosetta_rot_data(
