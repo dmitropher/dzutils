@@ -5,6 +5,13 @@ from dzutils.pdb_file_utils import pdb_files_in_dir as _pfd
 from dzutils.util import read_flag_file
 
 
+def parse_label(pose, label):
+    sel = pyrosetta.rosetta.core.select.residue_selector.ResiduePDBInfoHasLabelSelector(
+        label
+    )
+    return [i for i, has_label in enumerate(sel.apply(pose), 1) if has_label]
+
+
 def safe_load_pdbs(pdbs):
     for pdb in pdbs:
         try:

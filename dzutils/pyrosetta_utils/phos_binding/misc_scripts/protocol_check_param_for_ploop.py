@@ -127,8 +127,8 @@ def main(
             plen = len(p.residues)
             stub_xyzs = np.array(get_bb_xyzs(p, *range(1,plen+1)))
             bb_stubs = hstub(
-            *np.swapaxes(stub_xyzs, 0, 1),
-            cen=list(stub_xyzs[:, 1, :]),
+                *np.swapaxes(stub_xyzs, 0, 1),
+                cen=list(stub_xyzs[:, 1, :]),
             )
             b_res_list = np.arange(1,plen+1)
             reshaped_rts = np.repeat(rts.values.reshape(rt_count,4,4),bb_stubs.shape[0] ,axis=0)
