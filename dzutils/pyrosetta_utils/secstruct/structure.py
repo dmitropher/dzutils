@@ -62,6 +62,9 @@ class SecondaryStructureResidueContainer(object):
         )
         return s
 
+    def __len__(self):
+        return self.end_pos - self.start_pos + 1
+
     def get_range(self):
         """
         Returns a tuple (start_pos,end_pos)
@@ -182,6 +185,13 @@ def get_container_creator():
     return factory
 
 
+global_creator = get_container_creator()
+
+
+def get_container(pose, start, end, dssp_type):
+    return global_creator.get_container(pose, start, end, dssp_type)
+
+
 def get_allowed_dssp_values():
     """
     Returns the DSSP string values registered with the current creator
@@ -208,9 +218,9 @@ def parse_structure_from_dssp(pose, *dssp_types):
         }
         for i, chain in enumerate(pose.split_by_chain(), 1)
     ]
-    creator = get_container_creator()
+    # creator = get_container_creator()
     return [
-        creator.get_container(
+        get_container(
             pose,
             run[0] + pose.chain_begin(dssp_dict["chain_num"]),
             run[-1] + pose.chain_begin(dssp_dict["chain_num"]),

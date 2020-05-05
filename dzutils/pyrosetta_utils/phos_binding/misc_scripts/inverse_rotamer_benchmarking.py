@@ -373,6 +373,8 @@ def test_hash_table(
     logger.debug("got query and rotamer")
     binner = xb(xbin_cart_resl, xbin_ori_resl)
     rts_array = np.array(query_rts)
+    print(rts_array.shape)
+    print(rts_array)
     test_keys = binner.get_bin_index(rts_array)
     logger.debug("generated keys to check table")
     hits_mask = table.contains(test_keys)
